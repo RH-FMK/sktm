@@ -11,7 +11,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-
 import json
 import logging
 import time
@@ -220,7 +219,6 @@ class skt_jenkins(object):
             params["makeopts"] = makeopts
 
         logging.debug(params)
-        job = self.server.get_job(jobname)
         expected_id = self.server.get_job(jobname).get_next_build_number()
         self.server.build_job(jobname, params)
         build = self.find_build(jobname, params, expected_id)

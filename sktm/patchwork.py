@@ -13,16 +13,19 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 import datetime
-import dateutil.parser
 import email
 import email.header
 import enum
 import json
 import logging
-import requests
 import re
 import urllib
 import xmlrpclib
+
+import dateutil.parser
+
+import requests
+
 import sktm
 
 
@@ -78,6 +81,10 @@ def stringify(v):
         return v.encode('utf-8')
 
     return str(v)
+
+
+class RpcProtocolMismatch(Exception):
+    """Exception for Patchwork API mismatch errors"""
 
 
 # Internal RH PatchWork adds a magic API version with each call
@@ -563,12 +570,13 @@ class skt_patchwork2(object):
         ) + datetime.timedelta(seconds=1)
 
         logging.debug("get_new_patchsets since %s", nsince.isoformat())
-        patchsets = self.get_patchsets_by_patch("%s?project=%d&since=%s" %
-                                                (self.apiurls.get("patches"),
-                                                 self.projectid,
-                                                 urllib.quote(
-                                                     nsince.isoformat()
-                                                 )))
+        patchsets = self.get_patchsets_by_patch(
+            "%s?project=%d&since=%s" % (
+                self.apiurls.get("patches"),
+                self.projectid,
+                urllib.quote(nsince.isoformat())
+            )
+        )
         return patchsets
 
     # TODO This shouldn't really skip patches to retrieve, should it?
