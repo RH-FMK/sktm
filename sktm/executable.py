@@ -113,7 +113,8 @@ def load_config(args):
     return cfg
 
 
-if __name__ == '__main__':
+def main():
+    """Handle the execution of sktm"""
     parser = setup_parser()
     args = parser.parse_args()
 
@@ -130,3 +131,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         logging.info("Quitting...")
         sw.cleanup()
+
+
+if __name__ == '__main__':
+    main()
