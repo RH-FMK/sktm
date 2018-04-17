@@ -40,15 +40,20 @@ class skt_db(object):
         c.executescript("""
                 PRAGMA foreign_keys = on;
 
+                /* Base Git repositories */
                 CREATE TABLE baserepo(
                   id INTEGER PRIMARY KEY,
                   url TEXT UNIQUE
                 );
 
+                /* Patch sources (Patchwork projects) */
                 CREATE TABLE patchsource(
                   id INTEGER PRIMARY KEY,
+                  /* Patchwork base URL */
                   baseurl TEXT,
+                  /* Numeric Patchwork project ID */
                   project_id INTEGER,
+                  /* TODO: Remove as unused */
                   date TEXT
                 );
 
@@ -62,17 +67,24 @@ class skt_db(object):
                   FOREIGN KEY(patchsource_id) REFERENCES patchsource(id)
                 );
 
+                /* Patches submitted to testing previously */
                 CREATE TABLE pendingpatches(
+                  /* Pending patch ID within the source */
                   id INTEGER PRIMARY KEY,
+                  /* Patch date */
                   pdate TEXT,
+                  /* Patch source ID */
                   patchsource_id INTEGER,
+                  /* Time when patch was submitted to testing last */
                   timestamp INTEGER,
                   FOREIGN KEY(patchsource_id) REFERENCES patchsource(id)
                 );
 
                 CREATE TABLE testrun(
                   id INTEGER PRIMARY KEY,
+                  /* Result ID (sktm.tresult values) */
                   result_id INTEGER,
+                  /* Jenkins build number */
                   build_id INTEGER
                 );
 
