@@ -48,11 +48,10 @@ class watcher(object):
         # FIXME Clarify/fix member variable names
         # Database instance
         self.db = sktm.db.skt_db(os.path.expanduser(dbpath))
-        # Jenkins interface instance
-        self.jk = sktm.jenkins.skt_jenkins(jenkinsurl, jenkinslogin,
-                                           jenkinspassword)
-        # Jenkins project name
-        self.jobname = jenkinsjobname
+        # Jenkins project interface instance
+        self.jk = sktm.jenkins.Project(jenkinsjobname,
+                                       jenkinsurl, jenkinslogin,
+                                       jenkinspassword)
         # Extra arguments to pass to "make"
         self.makeopts = makeopts
         # List of pending Jenkins builds, each one represented by a 3-tuple
@@ -147,8 +146,7 @@ class watcher(object):
     def check_baseline(self):
         """Submit a build for baseline"""
         self.pj.append((sktm.jtype.BASELINE,
-                        self.jk.build(self.jobname,
-                                      baserepo=self.baserepo,
+                        self.jk.build(baserepo=self.baserepo,
                                       ref=self.baseref,
                                       baseconfig=self.cfgurl,
                                       makeopts=self.makeopts),
@@ -198,7 +196,6 @@ class watcher(object):
                 # Submit and remember a Jenkins build for the patchset
                 self.pj.append((sktm.jtype.PATCHWORK,
                                 self.jk.build(
-                                    self.jobname,
                                     baserepo=self.baserepo,
                                     ref=stablecommit,
                                     baseconfig=self.cfgurl,
@@ -215,37 +212,37 @@ class watcher(object):
 
     def check_pending(self):
         for (pjt, bid, cpw) in self.pj:
-            if self.jk.is_build_complete(self.jobname, bid):
+            if self.jk.is_build_complete(bid):
                 logging.info("job completed: jjid=%d; type=%d", bid, pjt)
                 self.pj.remove((pjt, bid, cpw))
                 if pjt == sktm.jtype.BASELINE:
                     self.db.update_baseline(
                         self.baserepo,
-                        self.jk.get_base_hash(self.jobname, bid),
-                        self.jk.get_base_commitdate(self.jobname, bid),
-                        self.jk.get_result(self.jobname, bid),
+                        self.jk.get_base_hash(bid),
+                        self.jk.get_base_commitdate(bid),
+                        self.jk.get_result(bid),
                         bid
                     )
                 elif pjt == sktm.jtype.PATCHWORK:
                     patches = list()
                     slist = list()
                     series = None
-                    bres = self.jk.get_result(self.jobname, bid)
-                    rurl = self.jk.get_result_url(self.jobname, bid)
+                    bres = self.jk.get_result(bid)
+                    rurl = self.jk.get_result_url(bid)
                     logging.info("result=%s", bres)
                     logging.info("url=%s", rurl)
-                    basehash = self.jk.get_base_hash(self.jobname, bid)
+                    basehash = self.jk.get_base_hash(bid)
                     logging.info("basehash=%s", basehash)
                     if bres == sktm.misc.tresult.BASELINE_FAILURE:
                         self.db.update_baseline(
                             self.baserepo,
                             basehash,
-                            self.jk.get_base_commitdate(self.jobname, bid),
+                            self.jk.get_base_commitdate(bid),
                             sktm.misc.tresult.TEST_FAILURE,
                             bid
                         )
 
-                    patchset = self.jk.get_patchwork(self.jobname, bid)
+                    patchset = self.jk.get_patchwork(bid)
                     for purl in patchset:
                         match = re.match(r"(.*)/patch/(\d+)$", purl)
                         if match:

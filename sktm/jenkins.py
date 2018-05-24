@@ -21,22 +21,26 @@ import jenkinsapi
 import sktm.misc
 
 
-class skt_jenkins(object):
-    """Jenkins interface"""
-    def __init__(self, url, username=None, password=None):
+class Project(object):
+    """Jenkins project interface"""
+    def __init__(self, name, url, username=None, password=None):
         """
-        Initialize a Jenkins interface.
+        Initialize a Jenkins project interface.
 
         Args:
+            name:        Name of the Jenkins project to operate on.
             url:         Jenkins instance URL.
             username:    Jenkins user name.
             password:    Jenkins user password.
         """
+        # Name of the Jenkins project to operate on
+        self.name = name
+        # Jenkins server interface
         # TODO Add support for CSRF protection
         self.server = jenkinsapi.jenkins.Jenkins(url, username, password)
 
-    def _wait_and_get_build(self, jobname, buildid):
-        job = self.server.get_job(jobname)
+    def _wait_and_get_build(self, buildid):
+        job = self.server.get_job(self.name)
         build = job.get_build(buildid)
         build.block_until_complete(delay=60)
 
@@ -45,14 +49,13 @@ class skt_jenkins(object):
 
         return build
 
-    def get_cfg_data(self, jobname, buildid, stepname, cfgkey, default=None):
+    def get_cfg_data(self, buildid, stepname, cfgkey, default=None):
         """
         Get a value from a JSON-formatted output of a test result, of the
-        specified completed build for the specified project. Wait for the
-        build to complete, if it hasn't yet.
+        specified completed build. Wait for the build to complete, if it
+        hasn't yet.
 
         Args:
-            jobname:    Jenkins project name.
             buildid:    Jenkins build ID.
             stepname:   Test (step) path in the result, which output should be
                         parsed as JSON.
@@ -63,7 +66,7 @@ class skt_jenkins(object):
         Returns:
             The key value, or the default if not found.
         """
-        build = self._wait_and_get_build(jobname, buildid)
+        build = self._wait_and_get_build(buildid)
 
         if not build.has_resultset():
             raise Exception("No results for build %d (%s)" %
@@ -75,87 +78,74 @@ class skt_jenkins(object):
                 cfg = json.loads(val.stdout)
                 return cfg.get(cfgkey, default)
 
-    def get_base_commitdate(self, jobname, buildid):
+    def get_base_commitdate(self, buildid):
         """
-        Get base commit's committer date of the specified completed build for
-        the specified project. Wait for the build to complete, if it hasn't
-        yet.
+        Get base commit's committer date of the specified completed build.
+        Wait for the build to complete, if it hasn't yet.
 
         Args:
-            jobname:    Jenkins project name.
             buildid:    Jenkins build ID.
 
         Return:
             The epoch timestamp string of the committer date.
         """
-        return self.get_cfg_data(jobname, buildid, "skt.cmd_merge",
-                                 "commitdate")
+        return self.get_cfg_data(buildid, "skt.cmd_merge", "commitdate")
 
-    def get_base_hash(self, jobname, buildid):
+    def get_base_hash(self, buildid):
         """
-        Get base commit's hash of the specified completed build for the
-        specified project. Wait for the build to complete, if it hasn't yet.
+        Get base commit's hash of the specified completed build.
+        Wait for the build to complete, if it hasn't yet.
 
         Args:
-            jobname:    Jenkins project name.
             buildid:    Jenkins build ID.
 
         Return:
             The base commit's hash string.
         """
-        return self.get_cfg_data(jobname, buildid, "skt.cmd_merge",
-                                 "basehead")
+        return self.get_cfg_data(buildid, "skt.cmd_merge", "basehead")
 
     # FIXME Clarify function name
-    def get_patchwork(self, jobname, buildid):
+    def get_patchwork(self, buildid):
         """
-        Get the list of Patchwork patch URLs for the specified completed build
-        for the specified project. Wait for the build to complete, if it
-        hasn't yet.
+        Get the list of Patchwork patch URLs for the specified completed
+        build. Wait for the build to complete, if it hasn't yet.
 
         Args:
-            jobname:    Jenkins project name.
             buildid:    Jenkins build ID.
 
         Return:
             The list of Patchwork patch URLs.
         """
-        return self.get_cfg_data(jobname, buildid, "skt.cmd_merge",
-                                 "pw")
+        return self.get_cfg_data(buildid, "skt.cmd_merge", "pw")
 
-    def get_baseretcode(self, jobname, buildid):
-        return self.get_cfg_data(jobname, buildid, "skt.cmd_run",
-                                 "baseretcode", 0)
+    def get_baseretcode(self, buildid):
+        return self.get_cfg_data(buildid, "skt.cmd_run", "baseretcode", 0)
 
-    def get_result_url(self, jobname, buildid):
+    def get_result_url(self, buildid):
         """
-        Get the URL of the web representation of the specified build of the
-        specified Jenkins project.
+        Get the URL of the web representation of the specified build.
 
         Args:
-            jobname:    Jenkins project name.
             buildid:    Jenkins build ID.
 
         Result:
             The URL of the build result.
         """
-        return "%s/job/%s/%s" % (self.server.base_server_url(), jobname,
+        return "%s/job/%s/%s" % (self.server.base_server_url(), self.name,
                                  buildid)
 
-    def get_result(self, jobname, buildid):
+    def get_result(self, buildid):
         """
-        Get result code (sktm.misc.tresult) for the specified build of the
-        specified Jenkins project. Wait for the build to complete, if it
-        hasn't yet.
+        Get result code (sktm.misc.tresult) for the specified build.
+        Wait for the build to complete, if it hasn't yet.
 
         Args:
-            jobname:    Jenkins project name.
             buildid:    Jenkins build ID.
 
         Result:
             The build result code (sktm.misc.tresult).
         """
-        build = self._wait_and_get_build(jobname, buildid)
+        build = self._wait_and_get_build(buildid)
 
         bstatus = build.get_status()
         logging.info("build_status=%s", bstatus)
@@ -170,7 +160,7 @@ class skt_jenkins(object):
         if bstatus == "UNSTABLE" and \
                 (build.get_resultset()["skt.cmd_run"].status in
                  ["PASSED", "FIXED"]):
-            if self.get_baseretcode(jobname, buildid) != 0:
+            if self.get_baseretcode(buildid) != 0:
                 logging.warning("baseline failure found during patch testing")
                 return sktm.misc.tresult.BASELINE_FAILURE
 
@@ -193,14 +183,13 @@ class skt_jenkins(object):
         return sktm.misc.tresult.TEST_FAILURE
 
     # FIXME Clarify/fix argument names
-    def build(self, jobname, baserepo=None, ref=None, baseconfig=None,
+    def build(self, baserepo=None, ref=None, baseconfig=None,
               message_id=None, subject=None, emails=set(), patchwork=[],
               makeopts=None):
         """
         Submit a build of a patchset.
 
         Args:
-            jobname:    Name of the Jenkins project to build.
             baserepo:   Baseline Git repo URL.
             ref:        Baseline Git reference to test.
             baseconfig: Kernel configuration URL.
@@ -243,15 +232,15 @@ class skt_jenkins(object):
             params["makeopts"] = makeopts
 
         logging.debug(params)
-        job = self.server.get_job(jobname)
-        expected_id = self.server.get_job(jobname).get_next_build_number()
-        self.server.build_job(jobname, params)
-        build = self.find_build(jobname, params, expected_id)
+        job = self.server.get_job(self.name)
+        expected_id = self.server.get_job(self.name).get_next_build_number()
+        self.server.build_job(self.name, params)
+        build = self.find_build(params, expected_id)
         logging.info("submitted build: %s", build)
         return build.get_number()
 
-    def is_build_complete(self, jobname, buildid):
-        job = self.server.get_job(jobname)
+    def is_build_complete(self, buildid):
+        job = self.server.get_job(self.name)
         build = job.get_build(buildid)
 
         return not build.is_running()
@@ -269,8 +258,8 @@ class skt_jenkins(object):
 
         return True
 
-    def find_build(self, jobname, params, eid=None):
-        job = self.server.get_job(jobname)
+    def find_build(self, params, eid=None):
+        job = self.server.get_job(self.name)
         lbuild = None
 
         while not lbuild:
