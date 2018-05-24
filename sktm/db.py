@@ -17,7 +17,7 @@ import logging
 import os
 import sqlite3
 import time
-import sktm
+import sktm.misc
 
 
 class skt_db(object):
@@ -268,7 +268,7 @@ class skt_db(object):
                          'ORDER BY baseline.commitdate DESC LIMIT 1',
                          (commithash, brid))
         res = self.cur.fetchone()
-        return None if res is None else sktm.tresult(res[0])
+        return None if res is None else sktm.misc.tresult(res[0])
 
     def get_stable(self, baserepo):
         """
@@ -458,7 +458,7 @@ class skt_db(object):
         for (burl, commit, res, buildid) in self.cur.fetchall():
             print("repo url:", burl)
             print("commit id:", commit)
-            print("result:", sktm.tresult(res).name)
+            print("result:", sktm.misc.tresult(res).name)
             print("build id: #", buildid, sep='')
             print("---")
 
