@@ -32,16 +32,13 @@ class jtype(enum.IntEnum):
 
 # TODO This is no longer just a watcher. Rename/refactor/describe accordingly.
 class watcher(object):
-    def __init__(self, jenkinsurl, jenkinslogin, jenkinspassword,
-                 jenkinsjobname, dbpath, filter, makeopts=None):
+    def __init__(self, jenkins_project, dbpath, filter, makeopts=None):
         """
         Initialize a "watcher".
 
         Args:
-            jenkinsurl:         Jenkins instance URL.
-            jenkinslogin:       Jenkins user name.
-            jenkinspassword:    Jenkins user password.
-            jenkinsjobname:     Name of the Jenkins job to trigger and watch.
+            jenkins_project:    Interface to the Jenkins project to trigger
+                                and watch (sktm.jenkins.JenkinsProject).
             dbpath:             Path to the job status database file.
             filter:             The name of a patchset filter program.
                                 The program should accept a list of mbox URLs
@@ -56,12 +53,10 @@ class watcher(object):
                                 building.
         """
         # FIXME Clarify/fix member variable names
+        # Jenkins project interface instance
+        self.jk = jenkins_project
         # Database instance
         self.db = sktm.db.skt_db(os.path.expanduser(dbpath))
-        # Jenkins project interface instance
-        self.jk = sktm.jenkins.JenkinsProject(jenkinsjobname,
-                                              jenkinsurl, jenkinslogin,
-                                              jenkinspassword)
         # Patchset filter program
         self.filter = filter
         # Extra arguments to pass to "make"
