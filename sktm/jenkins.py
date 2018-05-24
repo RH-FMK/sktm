@@ -39,7 +39,7 @@ class Project(object):
         # TODO Add support for CSRF protection
         self.server = jenkinsapi.jenkins.Jenkins(url, username, password)
 
-    def _wait_and_get_build(self, buildid):
+    def __wait_and_get_build(self, buildid):
         job = self.server.get_job(self.name)
         build = job.get_build(buildid)
         build.block_until_complete(delay=60)
@@ -49,7 +49,7 @@ class Project(object):
 
         return build
 
-    def get_cfg_data(self, buildid, stepname, cfgkey, default=None):
+    def __get_cfg_data(self, buildid, stepname, cfgkey, default=None):
         """
         Get a value from a JSON-formatted output of a test result, of the
         specified completed build. Wait for the build to complete, if it
@@ -66,7 +66,7 @@ class Project(object):
         Returns:
             The key value, or the default if not found.
         """
-        build = self._wait_and_get_build(buildid)
+        build = self.__wait_and_get_build(buildid)
 
         if not build.has_resultset():
             raise Exception("No results for build %d (%s)" %
@@ -89,7 +89,7 @@ class Project(object):
         Return:
             The epoch timestamp string of the committer date.
         """
-        return self.get_cfg_data(buildid, "skt.cmd_merge", "commitdate")
+        return self.__get_cfg_data(buildid, "skt.cmd_merge", "commitdate")
 
     def get_base_hash(self, buildid):
         """
@@ -102,7 +102,7 @@ class Project(object):
         Return:
             The base commit's hash string.
         """
-        return self.get_cfg_data(buildid, "skt.cmd_merge", "basehead")
+        return self.__get_cfg_data(buildid, "skt.cmd_merge", "basehead")
 
     # FIXME Clarify function name
     def get_patchwork(self, buildid):
@@ -116,10 +116,10 @@ class Project(object):
         Return:
             The list of Patchwork patch URLs.
         """
-        return self.get_cfg_data(buildid, "skt.cmd_merge", "pw")
+        return self.__get_cfg_data(buildid, "skt.cmd_merge", "pw")
 
-    def get_baseretcode(self, buildid):
-        return self.get_cfg_data(buildid, "skt.cmd_run", "baseretcode", 0)
+    def __get_baseretcode(self, buildid):
+        return self.__get_cfg_data(buildid, "skt.cmd_run", "baseretcode", 0)
 
     def get_result_url(self, buildid):
         """
@@ -145,7 +145,7 @@ class Project(object):
         Result:
             The build result code (sktm.misc.tresult).
         """
-        build = self._wait_and_get_build(buildid)
+        build = self.__wait_and_get_build(buildid)
 
         bstatus = build.get_status()
         logging.info("build_status=%s", bstatus)
@@ -160,7 +160,7 @@ class Project(object):
         if bstatus == "UNSTABLE" and \
                 (build.get_resultset()["skt.cmd_run"].status in
                  ["PASSED", "FIXED"]):
-            if self.get_baseretcode(buildid) != 0:
+            if self.__get_baseretcode(buildid) != 0:
                 logging.warning("baseline failure found during patch testing")
                 return sktm.misc.tresult.BASELINE_FAILURE
 
@@ -235,7 +235,7 @@ class Project(object):
         job = self.server.get_job(self.name)
         expected_id = self.server.get_job(self.name).get_next_build_number()
         self.server.build_job(self.name, params)
-        build = self.find_build(params, expected_id)
+        build = self.__find_build(params, expected_id)
         logging.info("submitted build: %s", build)
         return build.get_number()
 
@@ -245,7 +245,7 @@ class Project(object):
 
         return not build.is_running()
 
-    def _params_eq(self, build, params):
+    def __params_eq(self, build, params):
         try:
             build_params = build.get_actions()["parameters"]
         except (AttributeError, KeyError):
@@ -258,7 +258,7 @@ class Project(object):
 
         return True
 
-    def find_build(self, params, eid=None):
+    def __find_build(self, params, eid=None):
         job = self.server.get_job(self.name)
         lbuild = None
 
@@ -272,12 +272,12 @@ class Project(object):
             while lbuild.get_number() < eid:
                 time.sleep(1)
                 lbuild = job.get_last_build()
-        if self._params_eq(lbuild, params):
+        if self.__params_eq(lbuild, params):
             return lbuild
 
         # slowpath
         for bid in job.get_build_ids():
             build = job.get_build(bid)
-            if self._params_eq(build, params):
+            if self.__params_eq(build, params):
                 return build
         return None
