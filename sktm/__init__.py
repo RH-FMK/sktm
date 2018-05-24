@@ -18,7 +18,6 @@ import os
 import re
 import time
 import sktm.db
-import sktm.jenkins
 import sktm.patchwork
 import sktm.misc
 
@@ -31,16 +30,13 @@ class jtype(enum.IntEnum):
 
 # TODO This is no longer just a watcher. Rename/refactor/describe accordingly.
 class watcher(object):
-    def __init__(self, jenkinsurl, jenkinslogin, jenkinspassword,
-                 jenkinsjobname, dbpath, makeopts=None):
+    def __init__(self, jenkins_project, dbpath, makeopts=None):
         """
         Initialize a "watcher".
 
         Args:
-            jenkinsurl:         Jenkins instance URL.
-            jenkinslogin:       Jenkins user name.
-            jenkinspassword:    Jenkins user password.
-            jenkinsjobname:     Name of the Jenkins job to trigger and watch.
+            jenkins_project:    Interface to the Jenkins project to trigger
+                                and watch (sktm.jenkins.Project).
             dbpath:             Path to the job status database file.
             makeopts:           Extra arguments to pass to "make" when
                                 building.
@@ -49,9 +45,7 @@ class watcher(object):
         # Database instance
         self.db = sktm.db.skt_db(os.path.expanduser(dbpath))
         # Jenkins project interface instance
-        self.jk = sktm.jenkins.Project(jenkinsjobname,
-                                       jenkinsurl, jenkinslogin,
-                                       jenkinspassword)
+        self.jk = jenkins_project
         # Extra arguments to pass to "make"
         self.makeopts = makeopts
         # List of pending Jenkins builds, each one represented by a 3-tuple
