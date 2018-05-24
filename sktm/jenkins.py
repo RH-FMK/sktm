@@ -18,7 +18,7 @@ import time
 
 import jenkinsapi
 
-import sktm
+import sktm.misc
 
 
 class skt_jenkins(object):
@@ -138,7 +138,7 @@ class skt_jenkins(object):
         logging.info("build_status=%s", bstatus)
 
         if bstatus == "SUCCESS":
-            return sktm.tresult.SUCCESS
+            return sktm.misc.tresult.SUCCESS
 
         if not build.has_resultset():
             raise Exception("No results for build %d (%s)" %
@@ -149,9 +149,9 @@ class skt_jenkins(object):
                  ["PASSED", "FIXED"]):
             if self.get_baseretcode(jobname, buildid) != 0:
                 logging.warning("baseline failure found during patch testing")
-                return sktm.tresult.BASELINE_FAILURE
+                return sktm.misc.tresult.BASELINE_FAILURE
 
-            return sktm.tresult.SUCCESS
+            return sktm.misc.tresult.SUCCESS
 
         for (key, val) in build.get_resultset().iteritems():
             if not key.startswith("skt."):
@@ -160,14 +160,14 @@ class skt_jenkins(object):
             logging.debug("key=%s; value=%s", key, val.status)
             if val.status == "FAILED" or val.status == "REGRESSION":
                 if key == "skt.cmd_merge":
-                    return sktm.tresult.MERGE_FAILURE
+                    return sktm.misc.tresult.MERGE_FAILURE
                 elif key == "skt.cmd_build":
-                    return sktm.tresult.BUILD_FAILURE
+                    return sktm.misc.tresult.BUILD_FAILURE
                 elif key == "skt.cmd_run":
-                    return sktm.tresult.TEST_FAILURE
+                    return sktm.misc.tresult.TEST_FAILURE
 
         logging.warning("Unknown status. marking as test failure")
-        return sktm.tresult.TEST_FAILURE
+        return sktm.misc.tresult.TEST_FAILURE
 
     # FIXME Clarify/fix argument names
     def build(self, jobname, baserepo=None, ref=None, baseconfig=None,

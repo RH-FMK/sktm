@@ -20,17 +20,8 @@ import subprocess
 import time
 import sktm.db
 import sktm.jenkins
+import sktm.misc
 import sktm.patchwork
-
-
-class tresult(enum.IntEnum):
-    """Test result"""
-    SUCCESS = 0
-    MERGE_FAILURE = 1
-    BUILD_FAILURE = 2
-    PUBLISH_FAILURE = 3
-    TEST_FAILURE = 4
-    BASELINE_FAILURE = 5
 
 
 class jtype(enum.IntEnum):
@@ -303,12 +294,12 @@ class watcher(object):
                     logging.info("url=%s", rurl)
                     basehash = self.jk.get_base_hash(self.jobname, bid)
                     logging.info("basehash=%s", basehash)
-                    if bres == sktm.tresult.BASELINE_FAILURE:
+                    if bres == sktm.misc.tresult.BASELINE_FAILURE:
                         self.db.update_baseline(
                             self.baserepo,
                             basehash,
                             self.jk.get_base_commitdate(self.jobname, bid),
-                            sktm.tresult.TEST_FAILURE,
+                            sktm.misc.tresult.TEST_FAILURE,
                             bid
                         )
 
@@ -342,7 +333,7 @@ class watcher(object):
                     except ValueError:
                         pass
 
-                    if bres != sktm.tresult.BASELINE_FAILURE:
+                    if bres != sktm.misc.tresult.BASELINE_FAILURE:
                         self.db.commit_patchtest(self.baserepo, basehash,
                                                  patches, bres, bid, series)
                 else:
