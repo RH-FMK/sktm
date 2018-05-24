@@ -2,10 +2,13 @@ language: python
 python:
     - "2.7"
 install:
-    - pip install enum34 dateutils requests junit_xml jenkinsapi beaker-client
-                  pycodestyle
+    # Install sktm using pip to ensure dependencies are downloaded correctly.
+    - pip install .
+    - pip install -r test-requirements.txt
 script:
-    # Make sure all Python files are loadable
-    - find -name '*.py' | xargs -l1 -IFILE python -c 'import imp; imp.load_source("", "FILE")'
-    # Check coding style
-    - pycodestyle .
+    # Run tests and linters.
+    - flake8 --show-source .
+    - pylint tests
+    - python -m unittest discover tests
+    # Test the uninstallation of sktm
+    - pip uninstall -y sktm

@@ -66,7 +66,14 @@ Install Kerberos client to enable `skt` authentication to Beaker:
 Install `skt` dependencies following its
 [README.md](https://github.com/RH-FMK/skt).
 
-Setup
+Installation
+------------
+
+Install `sktm` using pip:
+
+    pip install git+https://github.com/rh-fmk/sktm
+
+Usage
 -----
 
 ### Beaker access
@@ -335,20 +342,40 @@ Patchwork v2 instance after `Thu,  3 May 2018 14:35:00 +0100` timestamp:
               --restapi https://patchwork.ozlabs.org netdev \
               --lastpatch 'Thu,  3 May 2018 14:35:00 +0100'
 
+<<<<<<< HEAD
 Note: do not run the commands above with the `--lastpatch` option value
 intact, as that would likely result in a lot of Jenkins jobs submitted,
 because development has moved on since the writing of this guide, and many
 more patches have been recorded by these Patchwork instances. Look at the
 patches in the instances and pick your own values.
+=======
+    sktm -v baseline git://git.kernel.org/pub/scm/linux/kernel/git/davem/net-next.git master
+>>>>>>> Documentation updates for pip installs
 
 ### Testing further patches
 
+<<<<<<< HEAD
 After this initial run is complete, the sktm database will have the last
 tested patch recorded, and further patches could be tested by executing the
 "patchwork" commands above without the `--lastpatch` option.
+=======
+    sktm -v patchwork --lastpatch 839503 git://git.kernel.org/pub/scm/linux/kernel/git/davem/net-next.git https://patchwork.ozlabs.org netdev
+>>>>>>> Documentation updates for pip installs
 
 However, it can be used again to push the last tested patch back, and retest
 already-tested patches, or to push it forward to skip testing some patches.
+
+Developer Guide
+---------------
+
+To quickly iterate on `sktm`, use the `-e` option with pip to enable
+*editable mode*:
+
+    # Change to the directory that contains the sktm codebase
+    pip install -e .
+
+This ensures that your changes are immediately in place when `sktm` is run
+again.
 
 License
 -------

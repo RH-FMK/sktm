@@ -13,11 +13,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-
-import argparse
 import ConfigParser
+import argparse
 import logging
 import os
+
 import sktm
 
 
@@ -113,7 +113,8 @@ def load_config(args):
     return cfg
 
 
-if __name__ == '__main__':
+def main():
+    """Handle the execution of sktm"""
     parser = setup_parser()
     args = parser.parse_args()
 
@@ -130,3 +131,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         logging.info("Quitting...")
         sw.cleanup()
+
+
+if __name__ == '__main__':
+    main()

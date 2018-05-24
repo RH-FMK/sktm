@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import time
+
 import sktm.db
 import sktm.jenkins
 import sktm.patchwork
@@ -184,10 +185,13 @@ class watcher(object):
             # Add patchset summaries for all patches staying pending for
             # longer than 12 hours
             patchsets += cpw.get_patchsets(
-                    self.db.get_expired_pending_patches(cpw.baseurl,
-                                                        cpw.projectid, 43200))
-            # For each patchset summary
-            for patchset in patchsets:
+                self.db.get_expired_pending_patches(
+                    cpw.baseurl,
+                    cpw.projectid,
+                    43200
+                )
+            )
+            for (patchset, emails) in patchsets:
                 # Create an empty list of patch ID and patch date tuples
                 pids = list()
                 # For each Patchwork patch URL in the patchset
