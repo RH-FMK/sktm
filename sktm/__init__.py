@@ -202,7 +202,7 @@ class watcher(object):
                                     message_id=patchset.message_id,
                                     subject=patchset.subject,
                                     emails=patchset.email_addr_set,
-                                    patchwork=patchset.patch_url_list,
+                                    patch_url_list=patchset.patch_url_list,
                                     makeopts=self.makeopts),
                                 cpw))
                 logging.info("submitted message ID: %s", patchset.message_id)
@@ -242,8 +242,8 @@ class watcher(object):
                             bid
                         )
 
-                    patchset = self.jk.get_patchwork(bid)
-                    for purl in patchset:
+                    patch_url_list = self.jk.get_patch_url_list(bid)
+                    for purl in patch_url_list:
                         match = re.match(r"(.*)/patch/(\d+)$", purl)
                         if match:
                             baseurl = match.group(1)
