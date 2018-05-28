@@ -18,18 +18,8 @@ import os
 import re
 import time
 import sktm.db
-import sktm.jenkins
 import sktm.patchwork
-
-
-class tresult(enum.IntEnum):
-    """Test result"""
-    SUCCESS = 0
-    MERGE_FAILURE = 1
-    BUILD_FAILURE = 2
-    PUBLISH_FAILURE = 3
-    TEST_FAILURE = 4
-    BASELINE_FAILURE = 5
+import sktm.misc
 
 
 class jtype(enum.IntEnum):
@@ -40,16 +30,13 @@ class jtype(enum.IntEnum):
 
 # TODO This is no longer just a watcher. Rename/refactor/describe accordingly.
 class watcher(object):
-    def __init__(self, jenkinsurl, jenkinslogin, jenkinspassword,
-                 jenkinsjobname, dbpath, makeopts=None):
+    def __init__(self, jenkins_project, dbpath, makeopts=None):
         """
         Initialize a "watcher".
 
         Args:
-            jenkinsurl:         Jenkins instance URL.
-            jenkinslogin:       Jenkins user name.
-            jenkinspassword:    Jenkins user password.
-            jenkinsjobname:     Name of the Jenkins job to trigger and watch.
+            jenkins_project:    Interface to the Jenkins project to trigger
+                                and watch (sktm.jenkins.Project).
             dbpath:             Path to the job status database file.
             makeopts:           Extra arguments to pass to "make" when
                                 building.
@@ -57,11 +44,8 @@ class watcher(object):
         # FIXME Clarify/fix member variable names
         # Database instance
         self.db = sktm.db.skt_db(os.path.expanduser(dbpath))
-        # Jenkins interface instance
-        self.jk = sktm.jenkins.skt_jenkins(jenkinsurl, jenkinslogin,
-                                           jenkinspassword)
-        # Jenkins project name
-        self.jobname = jenkinsjobname
+        # Jenkins project interface instance
+        self.jk = jenkins_project
         # Extra arguments to pass to "make"
         self.makeopts = makeopts
         # List of pending Jenkins builds, each one represented by a 3-tuple
@@ -156,8 +140,7 @@ class watcher(object):
     def check_baseline(self):
         """Submit a build for baseline"""
         self.pj.append((sktm.jtype.BASELINE,
-                        self.jk.build(self.jobname,
-                                      baserepo=self.baserepo,
+                        self.jk.build(baserepo=self.baserepo,
                                       ref=self.baseref,
                                       baseconfig=self.cfgurl,
                                       makeopts=self.makeopts),
@@ -207,14 +190,13 @@ class watcher(object):
                 # Submit and remember a Jenkins build for the patchset
                 self.pj.append((sktm.jtype.PATCHWORK,
                                 self.jk.build(
-                                    self.jobname,
                                     baserepo=self.baserepo,
                                     ref=stablecommit,
                                     baseconfig=self.cfgurl,
                                     message_id=patchset.message_id,
                                     subject=patchset.subject,
                                     emails=patchset.email_addr_set,
-                                    patchwork=patchset.patch_url_list,
+                                    patch_url_list=patchset.patch_url_list,
                                     makeopts=self.makeopts),
                                 cpw))
                 logging.info("submitted message ID: %s", patchset.message_id)
@@ -224,38 +206,38 @@ class watcher(object):
 
     def check_pending(self):
         for (pjt, bid, cpw) in self.pj:
-            if self.jk.is_build_complete(self.jobname, bid):
+            if self.jk.is_build_complete(bid):
                 logging.info("job completed: jjid=%d; type=%d", bid, pjt)
                 self.pj.remove((pjt, bid, cpw))
                 if pjt == sktm.jtype.BASELINE:
                     self.db.update_baseline(
                         self.baserepo,
-                        self.jk.get_base_hash(self.jobname, bid),
-                        self.jk.get_base_commitdate(self.jobname, bid),
-                        self.jk.get_result(self.jobname, bid),
+                        self.jk.get_base_hash(bid),
+                        self.jk.get_base_commitdate(bid),
+                        self.jk.get_result(bid),
                         bid
                     )
                 elif pjt == sktm.jtype.PATCHWORK:
                     patches = list()
                     slist = list()
                     series = None
-                    bres = self.jk.get_result(self.jobname, bid)
-                    rurl = self.jk.get_result_url(self.jobname, bid)
+                    bres = self.jk.get_result(bid)
+                    rurl = self.jk.get_result_url(bid)
                     logging.info("result=%s", bres)
                     logging.info("url=%s", rurl)
-                    basehash = self.jk.get_base_hash(self.jobname, bid)
+                    basehash = self.jk.get_base_hash(bid)
                     logging.info("basehash=%s", basehash)
-                    if bres == sktm.tresult.BASELINE_FAILURE:
+                    if bres == sktm.misc.tresult.BASELINE_FAILURE:
                         self.db.update_baseline(
                             self.baserepo,
                             basehash,
-                            self.jk.get_base_commitdate(self.jobname, bid),
-                            sktm.tresult.TEST_FAILURE,
+                            self.jk.get_base_commitdate(bid),
+                            sktm.misc.tresult.TEST_FAILURE,
                             bid
                         )
 
-                    patchset = self.jk.get_patchwork(self.jobname, bid)
-                    for purl in patchset:
+                    patch_url_list = self.jk.get_patch_url_list(bid)
+                    for purl in patch_url_list:
                         match = re.match(r"(.*)/patch/(\d+)$", purl)
                         if match:
                             baseurl = match.group(1)
@@ -284,7 +266,7 @@ class watcher(object):
                     except ValueError:
                         pass
 
-                    if bres != sktm.tresult.BASELINE_FAILURE:
+                    if bres != sktm.misc.tresult.BASELINE_FAILURE:
                         self.db.commit_patchtest(self.baserepo, basehash,
                                                  patches, bres, bid, series)
                 else:
