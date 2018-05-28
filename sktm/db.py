@@ -22,9 +22,8 @@ import sktm
 
 class skt_db(object):
     def __init__(self, db):
-        if not os.path.isfile(db):
-            self.createdb(db)
-
+        # Create or upgrade the database
+        self.createdb(db)
         self.conn = sqlite3.connect(db)
         self.cur = self.conn.cursor()
 
@@ -41,13 +40,13 @@ class skt_db(object):
                 PRAGMA foreign_keys = on;
 
                 /* Base Git repositories */
-                CREATE TABLE baserepo(
+                CREATE TABLE IF NOT EXISTS baserepo(
                   id INTEGER PRIMARY KEY,
                   url TEXT UNIQUE
                 );
 
                 /* Patch sources (Patchwork projects) */
-                CREATE TABLE patchsource(
+                CREATE TABLE IF NOT EXISTS patchsource(
                   id INTEGER PRIMARY KEY,
                   /* Patchwork base URL */
                   baseurl TEXT,
@@ -57,7 +56,7 @@ class skt_db(object):
                   date TEXT
                 );
 
-                CREATE TABLE patch(
+                CREATE TABLE IF NOT EXISTS patch(
                   id INTEGER PRIMARY KEY,
                   name TEXT,
                   url TEXT,
@@ -68,7 +67,7 @@ class skt_db(object):
                 );
 
                 /* Patches submitted to testing previously */
-                CREATE TABLE pendingpatches(
+                CREATE TABLE IF NOT EXISTS pendingpatches(
                   /* Pending patch ID within the source */
                   id INTEGER PRIMARY KEY,
                   /* Patch date */
@@ -80,7 +79,7 @@ class skt_db(object):
                   FOREIGN KEY(patchsource_id) REFERENCES patchsource(id)
                 );
 
-                CREATE TABLE testrun(
+                CREATE TABLE IF NOT EXISTS testrun(
                   id INTEGER PRIMARY KEY,
                   /* Result ID (sktm.tresult values) */
                   result_id INTEGER,
@@ -88,7 +87,7 @@ class skt_db(object):
                   build_id INTEGER
                 );
 
-                CREATE TABLE baseline(
+                CREATE TABLE IF NOT EXISTS baseline(
                   id INTEGER PRIMARY KEY,
                   baserepo_id INTEGER,
                   commitid TEXT,
@@ -98,7 +97,7 @@ class skt_db(object):
                   FOREIGN KEY(testrun_id) REFERENCES testrun(id)
                 );
 
-                CREATE TABLE patchtest(
+                CREATE TABLE IF NOT EXISTS patchtest(
                   id INTEGER PRIMARY KEY,
                   patch_series_id INTEGER,
                   baseline_id INTEGER,
