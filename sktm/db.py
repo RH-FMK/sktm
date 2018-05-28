@@ -56,6 +56,11 @@ class skt_db(object):
                   date TEXT
                 );
 
+                /*
+                 * TODO: Merge all the patch tables into one table with a
+                 *       status field
+                 */
+
                 CREATE TABLE IF NOT EXISTS patch(
                   id INTEGER PRIMARY KEY,
                   name TEXT,
