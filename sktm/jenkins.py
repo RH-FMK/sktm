@@ -113,7 +113,8 @@ class Project(object):
             buildid:    Jenkins build ID.
 
         Return:
-            The list of Patchwork patch URLs.
+            The list of Patchwork patch URLs, in the order the patches should
+            be applied in.
         """
         return self.__get_cfg_data(buildid, "skt.cmd_merge", "pw")
 
@@ -199,7 +200,8 @@ class Project(object):
                             or None if unknown.
             emails:         Set of e-mail addresses involved with the patchset
                             to send notifications to.
-            patch_url_list: List of URLs pointing to patches to apply.
+            patch_url_list: List of URLs pointing to patches to apply, in the
+                            order they should be applied in.
             makeopts:       String of extra arguments to pass to the build's
                             make invocation.
 
