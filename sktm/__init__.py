@@ -59,7 +59,8 @@ class watcher(object):
                                 specifying the cover letter mbox URL, if any.
                                 The program must exit with zero if the
                                 patchset can be tested, one if it shouldn't be
-                                tested at all, and 127 if an error occurred.
+                                tested at all, two if its testing should be
+                                delayed, and 127 if an error occurred.
                                 All other exit codes are reserved.
             makeopts:           Extra arguments to pass to "make" when
                                 building.
@@ -177,18 +178,20 @@ class watcher(object):
 
     def filter_patchsets(self, patchset_summary_list):
         """
-        Filter patchsets, determining which ones are ready for testing, and
-        which shouldn't be tested at all.
+        Filter patchsets, determining which ones are ready for testing, which
+        should be delayed, and which shouldn't be tested at all.
 
         Args:
             patchset_summary_list:  The list of summaries of patchsets
                                     to filter.
         Returns:
-            A tuple of patchset summary lists:
+            A three-tuple of patchset summary lists:
                 - patchsets ready for testing,
+                - patchsets to be delayed,
                 - patchsets which should not be tested
         """
         ready = []
+        delayed = []
         dropped = []
 
         for patchset_summary in patchset_summary_list:
@@ -206,6 +209,8 @@ class watcher(object):
                 ready.append(patchset_summary)
             else if status == 1:
                 dropped.append(patchset_summary)
+            else if status == 2:
+                delayed.append(patchset_summary)
             else if status == 127:
                 raise Exception("Filter command %s failed" % cmd)
             else if status < 0:
@@ -214,7 +219,7 @@ class watcher(object):
             else:
                 raise Exception("Filter command %s returned "
                                 "invalid status %d" % cmd, status)
-        return ready, dropped
+        return ready, delayed, dropped
 
     def check_patchwork(self):
         """
@@ -231,14 +236,34 @@ class watcher(object):
         logging.info("stable commit for %s is %s", self.baserepo, stablecommit)
         # For every Patchwork interface
         for cpw in self.pw:
+            patchsets = []
             # Get patchset summaries for all patches the Patchwork interface
             # hasn't seen yet
-            patchsets, _ = self.filter_patchsets(cpw.get_new_patchsets())
+            ready_patchsets, delayed_patchsets, _ = \
+                self.filter_patchsets(cpw.get_new_patchsets())
+            patchsets += ready_patchsets
+            for patchset in delayed_patchsets:
+                self.db.set_objects_delayed(cpw.baseurl, cpw.projectid,
+                                            patchset.get_obj_info_list())
+
             # Add patchset summaries for all patches staying pending for
             # longer than 12 hours
             patchsets += cpw.get_patchsets(
                     self.db.get_expired_pending_patches(cpw.baseurl,
                                                         cpw.projectid, 43200))
+
+            # Add patchset summaries for all patches staying delayed for
+            # longer than 12 hours
+            delayed_patchsets = cpw.get_patchsets(
+                    self.db.get_expired_delayed_objects(cpw.baseurl,
+                                                        cpw.projectid, 43200))
+            ready_patchsets, _, dropped_patchsets = \
+                self.filter_patchsets(delayed_patchsets)
+            for patchset in ready_patchsets + dropped_patchsets:
+                self.db.unset_objects_delayed(cpw.baseurl, cpw.projectid,
+                                              patchset.get_obj_id_list())
+            patchsets += ready_patchsets
+
             # For each patchset summary
             for patchset in patchsets:
                 # (Re-)add the patchset's patches to the "pending" list

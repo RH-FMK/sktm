@@ -161,6 +161,19 @@ class PatchsetSummary(object):
         """
         return [patch.url for patch in self.patch_list]
 
+    def __get_obj_list():
+        obj_list = list()
+        if self.cover_letter:
+            obj_list.append(cover_letter)
+        obj_list += self.patch_list
+        return obj_list
+
+    def get_obj_info_list():
+        return [(obj.id, obj.date) for obj in self.__get_obj_list() if obj.id]
+
+    def get_obj_id_list():
+        return [obj.id for obj in self.__get_obj_list() if obj.id]
+
 
 # TODO Move common code to a common parent class
 
