@@ -95,6 +95,25 @@ class PatchsetSummary(object):
         """
         self.subject = subject
 
+    def set_cover_letter(self, cover_letter):
+        """
+        Set the cover letter object summary.
+
+        Args:
+            cover_letter:   The cover letter object summary to set.
+        """
+        self.cover_letter = cover_letter
+
+    def get_cover_letter_url(self):
+        """
+        Get the URL of the cover letter object, if any.
+
+        Returns:
+            The URL of the cover letter object, if present, None if not.
+        """
+        if self.cover_letter and self.cover_letter.url:
+            return self.cover_letter.url
+
     def merge_email_addr_set(self, email_addr_set):
         """
         Merge a set of e-mail addresses involved with the patchset into
@@ -408,6 +427,13 @@ class skt_patchwork2(object):
                 logging.info("skipping series %d: %s", series.get("id"),
                              series.get("name"))
                 continue
+
+            cover = series.get("cover_letter")
+            if cover:
+                match = re.match("^(.*)/mbox$", cover.get("url", ""))
+                if match:
+                    patchset.set_cover_letter(
+                        ObjectSummary(match.group(1), cover.get("date")))
 
             logging.info("series [%d] %s", series.get("id"),
                          series.get("name"))
@@ -725,6 +751,9 @@ class skt_patchwork(object):
         # dictionary of XML RPC patch objects identified by the patch's
         # position in the series (extracted from the message subject).
         self.series = dict()
+        # A dictionary of series cover letter patch objects identified by
+        # "series IDs", the same ones used in "series' above.
+        self.covers = dict()
 
     # TODO Convert this to a simple function
     @property
@@ -1013,13 +1042,6 @@ class skt_patchwork(object):
             # Number of patches in series
             mpatch = int(smatch.group(2))
 
-            # If patch position is out of range
-            if cpatch < 1 or cpatch > mpatch:
-                logging.info("skipping patch %d: %s", pid, pname)
-                if pid > self.lastpatch:
-                    self.lastpatch = pid
-                return result
-
             #
             # Generate series ID
             #
@@ -1042,53 +1064,71 @@ class skt_patchwork(object):
                 # in series, otherwise, which is hardly unique
                 seriesid = "%s_%s" % (patch.get("submitter_id"), mpatch)
 
-            #
-            # Enter the patch into the series
-            #
+            # If it's a cover letter
+            if cpatch == 0:
+                # Remember the cover letter object
+                self.covers[seriesid] = patch
+            # Else, if it's a patch
+            else if cpatch >= 1 and cpatch <= mpatch:
+                #
+                # Enter the patch into the series
+                #
 
-            # Create series dictionary, if doesn't exist
-            if seriesid not in self.series:
-                self.series[seriesid] = dict()
+                # Create series dictionary, if doesn't exist
+                if seriesid not in self.series:
+                    self.series[seriesid] = dict()
 
-            # If the patch number was already seen in this series
-            if cpatch in self.series[seriesid]:
-                # Skip it
+                # If the patch number was already seen in this series
+                if cpatch in self.series[seriesid]:
+                    # Skip it
+                    return result
+
+                # Add it to the series
+                self.series[seriesid][cpatch] = patch
+
+                #
+                # Output completed series
+                #
+
+                # If we already got all the patches in the series
+                if len(self.series[seriesid].keys()) == mpatch:
+                    # Create the patchset summary
+                    logging.info("---")
+                    logging.info("patchset: %s", seriesid)
+
+                    result = PatchsetSummary()
+                    cover = self.covers.get(seriesid)
+                    if cover:
+                        result.set_cover_letter(
+                            ObjectSummary(self.patchurl(cover),
+                                          cover.get("date"),
+                                          cover.get("id")))
+
+                    # For each patch position in series in order
+                    for cpatch in sorted(self.series[seriesid].keys()):
+                        patch = self.series[seriesid].get(cpatch)
+                        pid = patch.get("id")
+                        message_id, subject = \
+                            self.get_header_value(pid, 'Message-ID', 'Subject')
+                        emails = self.get_emails(pid)
+                        self.log_patch(pid, patch.get("name"),
+                                       message_id, emails)
+                        result.set_message_id(message_id)
+                        result.set_subject(subject)
+                        result.merge_email_addr_set(emails)
+                        result.add_patch(ObjectSummary(self.patchurl(patch),
+                                                       patch.get("date"), pid))
+
+                    logging.info("message_id: %s", result.message_id)
+                    logging.info("subject: %s", result.subject)
+                    logging.info("emails: %s", result.email_addr_set)
+                    logging.info("---")
+            # Otherwise the patch message position is out of range
+            else:
+                logging.info("skipping patch %d: %s", pid, pname)
+                if pid > self.lastpatch:
+                    self.lastpatch = pid
                 return result
-
-            # Add it to the series
-            self.series[seriesid][cpatch] = patch
-
-            #
-            # Output completed series
-            #
-
-            # If we already got all the patches in the series
-            if len(self.series[seriesid].keys()) == mpatch:
-                # Create the patchset summary
-                logging.info("---")
-                logging.info("patchset: %s", seriesid)
-
-                result = PatchsetSummary()
-
-                # For each patch position in series in order
-                for cpatch in sorted(self.series[seriesid].keys()):
-                    patch = self.series[seriesid].get(cpatch)
-                    pid = patch.get("id")
-                    message_id, subject = self.get_header_value(pid,
-                                                                'Message-ID',
-                                                                'Subject')
-                    emails = self.get_emails(pid)
-                    self.log_patch(pid, patch.get("name"), message_id, emails)
-                    result.set_message_id(message_id)
-                    result.set_subject(subject)
-                    result.merge_email_addr_set(emails)
-                    result.add_patch(ObjectSummary(self.patchurl(patch),
-                                                   patch.get("date"), pid))
-
-                logging.info("message_id: %s", result.message_id)
-                logging.info("subject: %s", result.subject)
-                logging.info("emails: %s", result.email_addr_set)
-                logging.info("---")
         # Else, it's a single patch
         else:
             message_id, subject = self.get_header_value(pid,
