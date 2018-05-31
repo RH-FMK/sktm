@@ -22,9 +22,8 @@ import sktm
 
 class skt_db(object):
     def __init__(self, db):
-        if not os.path.isfile(db):
-            self.createdb(db)
-
+        # Create or upgrade the database
+        self.createdb(db)
         self.conn = sqlite3.connect(db)
         self.cur = self.conn.cursor()
 
@@ -40,19 +39,29 @@ class skt_db(object):
         c.executescript("""
                 PRAGMA foreign_keys = on;
 
-                CREATE TABLE baserepo(
+                /* Base Git repositories */
+                CREATE TABLE IF NOT EXISTS baserepo(
                   id INTEGER PRIMARY KEY,
                   url TEXT UNIQUE
                 );
 
-                CREATE TABLE patchsource(
+                /* Patch sources (Patchwork projects) */
+                CREATE TABLE IF NOT EXISTS patchsource(
                   id INTEGER PRIMARY KEY,
+                  /* Patchwork base URL */
                   baseurl TEXT,
+                  /* Numeric Patchwork project ID */
                   project_id INTEGER,
+                  /* TODO: Remove as unused */
                   date TEXT
                 );
 
-                CREATE TABLE patch(
+                /*
+                 * TODO: Merge all the patch tables into one table with a
+                 *       status field
+                 */
+
+                CREATE TABLE IF NOT EXISTS patch(
                   id INTEGER PRIMARY KEY,
                   name TEXT,
                   url TEXT,
@@ -62,21 +71,42 @@ class skt_db(object):
                   FOREIGN KEY(patchsource_id) REFERENCES patchsource(id)
                 );
 
-                CREATE TABLE pendingpatches(
+                /* Patches submitted to testing previously */
+                CREATE TABLE IF NOT EXISTS pendingpatches(
+                  /* Pending patch ID within the source */
                   id INTEGER PRIMARY KEY,
+                  /* Patch date */
                   pdate TEXT,
+                  /* Patch source ID */
                   patchsource_id INTEGER,
+                  /* Time when patch was submitted to testing last */
                   timestamp INTEGER,
                   FOREIGN KEY(patchsource_id) REFERENCES patchsource(id)
                 );
 
-                CREATE TABLE testrun(
+                /* Patch objects of patchsets not ready for testing */
+                CREATE TABLE IF NOT EXISTS delayedobjects(
+                  /* Delayed patch ID within the source */
+                  id INTEGER,
+                  /* Patch date */
+                  pdate TEXT,
+                  /* Patch source ID */
+                  patchsource_id INTEGER,
+                  /* Time when the patch was last checked for readiness */
+                  timestamp INTEGER,
+                  FOREIGN KEY(patchsource_id) REFERENCES patchsource(id),
+                  PRIMARY KEY(patchsource_id, id)
+                );
+
+                CREATE TABLE IF NOT EXISTS testrun(
                   id INTEGER PRIMARY KEY,
+                  /* Result ID (sktm.tresult values) */
                   result_id INTEGER,
+                  /* Jenkins build number */
                   build_id INTEGER
                 );
 
-                CREATE TABLE baseline(
+                CREATE TABLE IF NOT EXISTS baseline(
                   id INTEGER PRIMARY KEY,
                   baserepo_id INTEGER,
                   commitid TEXT,
@@ -86,7 +116,7 @@ class skt_db(object):
                   FOREIGN KEY(testrun_id) REFERENCES testrun(id)
                 );
 
-                CREATE TABLE patchtest(
+                CREATE TABLE IF NOT EXISTS patchtest(
                   id INTEGER PRIMARY KEY,
                   patch_series_id INTEGER,
                   baseline_id INTEGER,
@@ -241,6 +271,40 @@ class skt_db(object):
 
         return patchlist
 
+    def get_expired_delayed_objects(self, baseurl, projid, exptime=86400):
+        """
+        Get a list of IDs of patch objects delayed for longer than the
+        specified time, for a combination of a Patchwork base URL and
+        Patchwork project ID.
+
+        Args:
+            baseurl:    Base URL of Patchwork instance the project and patches
+                        belong to.
+            projid:     ID of the Patchwork project the objects belong to.
+            exptime:    The longer-than time the returned objects should have
+                        been staying in the "delayed" list.
+                        Default is anything longer than 24 hours.
+
+        Returns:
+            List of patch object IDs.
+        """
+        objects = list()
+        sourceid = self.get_sourceid(baseurl, projid)
+        tstamp = int(time.time()) - exptime
+
+        self.cur.execute('SELECT id FROM delayedobjects WHERE '
+                         'patchsource_id = ? AND '
+                         'timestamp < ?',
+                         (sourceid, tstamp))
+        for res in self.cur.fetchall():
+            objects.append(res[0])
+
+        if len(objects):
+            logging.info("expired delayed objects for %s (%d): %s", baseurl,
+                         projid, objects)
+
+        return objects
+
     def get_baselineid(self, brid, commithash):
         self.cur.execute('SELECT id FROM baseline WHERE '
                          'baserepo_id = ? AND commitid = ?',
@@ -332,6 +396,35 @@ class skt_db(object):
                               (pid, pdate) in patchset])
         self.conn.commit()
 
+    def set_objects_delayed(self, baseurl, projid, objects):
+        """
+        Add each specified patch object to the list of "delayed" objects, with
+        specifed patch date, for specified Patchwork base URL and project ID,
+        and marked with current timestamp. Replace any previously added
+        patch objects with the same ID (bug: should be "same ID, project ID
+        and base URL").
+
+        Args:
+            baseurl:    Base URL of the Patchwork instance the project ID and
+                        patch IDs belong to.
+            projid:     ID of the Patchwork project the patch IDs belong to.
+            objects:    List of info tuples for patch objects to add to the
+                        list, where each tuple contains the patch ID and an
+                        SQLite-compatible patch date string.
+        """
+        psid = self.get_sourceid(baseurl, projid)
+        tstamp = int(time.time())
+
+        logging.debug("setting objects as delayed: %s", objects)
+
+        self.cur.executemany('INSERT OR REPLACE INTO '
+                             'delayedobjects(id, pdate, patchsource_id, '
+                             'timestamp) '
+                             'VALUES(?, ?, ?, ?)',
+                             [(pid, pdate, psid, tstamp) for
+                              (pid, pdate) in objects])
+        self.conn.commit()
+
     def unset_patchset_pending(self, baseurl, projid, patchset):
         """
         Remove each specified patch from the list of "pending" patches, for
@@ -350,6 +443,26 @@ class skt_db(object):
         self.cur.executemany('DELETE FROM pendingpatches WHERE id = ? '
                              'AND patchsource_id = ?',
                              [(pid, psid) for pid in patchset])
+        self.conn.commit()
+
+    def unset_objects_delayed(self, baseurl, projid, objects):
+        """
+        Remove each specified patch object from the list of "delayed" objects,
+        for the specified Patchwork base URL and project ID.
+
+        Args:
+            baseurl:    Base URL of the Patchwork instance the project ID and
+                        patch IDs belong to.
+            projid:     ID of the Patchwork project the patch IDs belong to.
+            objects:    List of IDs of objects to be removed from the list.
+        """
+        psid = self.get_sourceid(baseurl, projid)
+
+        logging.debug("removing objects from delayed list: %s", objects)
+
+        self.cur.executemany('DELETE FROM delayedobjects WHERE id = ? '
+                             'AND patchsource_id = ?',
+                             [(pid, psid) for pid in objects])
         self.conn.commit()
 
     def update_baseline(self, baserepo, commithash, commitdate,
