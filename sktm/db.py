@@ -610,7 +610,8 @@ class skt_db(object):
 
         return series_id
 
-    def dump_baseline_tests(self):
+    def dump_baseline_tests(self):  # pragma: no cover
+        """Dump all of the current baseline tests from the database."""
         self.cur.execute('SELECT baserepo.url, baseline.commitid, '
                          'testrun.result_id, testrun.build_id '
                          'FROM baseline, baserepo, testrun '
@@ -624,7 +625,8 @@ class skt_db(object):
             print("build id: #", buildid, sep='')
             print("---")
 
-    def dump_baserepo_info(self):
+    def dump_baserepo_info(self):  # pragma: no cover
+        """Dump all of the information about baserepos."""
         self.cur.execute('SELECT url FROM baserepo')
 
         for (burl,) in self.cur.fetchall():
