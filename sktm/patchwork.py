@@ -24,7 +24,7 @@ import requests
 import re
 import urllib
 import xmlrpclib
-import sktm
+import sktm.misc
 
 
 class ObjectSummary(object):
@@ -592,12 +592,12 @@ class skt_patchwork2(object):
     def set_patch_check(self, pid, jurl, result):
         """
         Add a patch "check" for the specified patch, with the specified
-        Jenkins build URL and result (sktm.tresult).
+        Jenkins build URL and result (sktm.misc.tresult).
 
         Args:
             pid:    The ID of the patch to add the "check" for.
             jurl:   Jenkins build URL for the "check" to reference.
-            result: Test result (sktm.tresult) to feature in the "check"
+            result: Test result (sktm.misc.tresult) to feature in the "check"
                     state.
         """
         if self.apikey is None:
@@ -609,9 +609,9 @@ class skt_patchwork2(object):
                    'target_url': jurl,
                    'context': 'skt',
                    'description': 'skt boot test'}
-        if result == sktm.tresult.SUCCESS:
+        if result == sktm.misc.tresult.SUCCESS:
             payload['state'] = int(pwresult.SUCCESS)
-        elif result == sktm.tresult.BASELINE_FAILURE:
+        elif result == sktm.misc.tresult.BASELINE_FAILURE:
             payload['state'] = int(pwresult.WARNING)
             payload['description'] = 'Baseline failure found while testing '
             'this patch'
@@ -1034,12 +1034,12 @@ class skt_patchwork(object):
     def set_patch_check(self, pid, jurl, result):
         """
         Add a patch "check" for the specified patch, with the specified
-        Jenkins build URL and result (sktm.tresult).
+        Jenkins build URL and result (sktm.misc.tresult).
 
         Args:
             pid:    The ID of the patch to add the "check" for.
             jurl:   Jenkins build URL for the "check" to reference.
-            result: Test result (sktm.tresult) to feature in the "check"
+            result: Test result (sktm.misc.tresult) to feature in the "check"
                     state.
         """
         # TODO: Implement this for xmlrpc

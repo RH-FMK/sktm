@@ -24,17 +24,21 @@ import sktm
 class TestInit(unittest.TestCase):
     """Test cases for the __init__ module."""
 
-    @mock.patch('sktm.jenkins.skt_jenkins', Mock())
+    @mock.patch('sktm.jenkins.JenkinsProject', Mock())
     def setUp(self):
         """Test fixtures for testing __init__."""
         self.database_dir = tempfile.mkdtemp()
         self.database_file = "{}/testdb.sqlite".format(self.database_dir)
 
+        jenkins_project = sktm.jenkins.JenkinsProject(
+            name="sktm_jenkins_job",
+            url="http://example.com/jenkins",
+            username="username",
+            password="password"
+        )
+
         self.watcher_obj = sktm.watcher(
-            jenkinsurl="http://example.com/jenkins",
-            jenkinslogin="username",
-            jenkinspassword="password",
-            jenkinsjobname="sktm_jenkins_job",
+            jenkins_project,
             dbpath=self.database_file,
             filter=None,
             makeopts=None
