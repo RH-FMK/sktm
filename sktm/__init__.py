@@ -179,14 +179,19 @@ class watcher(object):
 
     # FIXME Fix the name, this function doesn't check anything by itself
     def check_baseline(self):
-        """Submit a build for baseline"""
-        self.pj.append((sktm.jtype.BASELINE,
-                        self.jk.build(self.jobname,
-                                      baserepo=self.baserepo,
-                                      ref=self.baseref,
-                                      baseconfig=self.cfgurl,
-                                      makeopts=self.makeopts),
-                        None))
+        """Submit a build for baseline."""
+        build_id = self.jk.build(
+            self.jobname,
+            baserepo=self.baserepo,
+            ref=self.baseref,
+            baseconfig=self.cfgurl,
+            makeopts=self.makeopts
+        )
+        self.pj.append((sktm.jtype.BASELINE, build_id, None))
+
+        # Add this baseline test to the pendingjobs table
+        self.db.add_pending_job(self.jobname, build_id)
+
 
     def filter_patchsets(self, series_summary_list):
         """
