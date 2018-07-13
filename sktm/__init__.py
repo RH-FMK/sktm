@@ -179,14 +179,25 @@ class watcher(object):
 
     # FIXME Fix the name, this function doesn't check anything by itself
     def check_baseline(self):
-        """Submit a build for baseline"""
-        self.pj.append((sktm.jtype.BASELINE,
-                        self.jk.build(self.jobname,
-                                      baserepo=self.baserepo,
-                                      ref=self.baseref,
-                                      baseconfig=self.cfgurl,
-                                      makeopts=self.makeopts),
-                        None))
+        """Submit a Jenkins job for testing a kernel baseline.
+
+        A kernel baseline is a known good commit. That commit is used to test
+        patches which are not known to be good.
+        """
+        # Start a Jenkins job and capture the build_id
+        build_id = self.jk.build(
+            self.jobname,
+            baserepo=self.baserepo,
+            ref=self.baseref,
+            baseconfig=self.cfgurl,
+            makeopts=self.makeopts
+        )
+
+        # Add the Jenkins job to the list of pending jobs
+        self.db.create_pending_job(self.jobname, build_id)
+
+        # Append it to the list of jobs to check later
+        self.pj.append((sktm.jtype.BASELINE, build_id, None))
 
     def filter_patchsets(self, series_summary_list):
         """
@@ -365,6 +376,10 @@ class watcher(object):
                         self.jk.get_result(self.jobname, bid),
                         bid
                     )
+
+                    # Delete the pendingjob from the database
+                    self.db.delete_pending_job(self.jobname, bid)
+
                 elif pjt == sktm.jtype.PATCHWORK:
                     # Get the build result
                     result = self.jk.get_result(self.jobname, bid)

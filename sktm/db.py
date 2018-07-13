@@ -176,6 +176,18 @@ class SktDb(object):
 
         return self.cur.lastrowid
 
+    def delete_pending_job(self, job_name, build_id):
+        """Delete a pendingjob from the database.
+
+        Args:
+            job_name: Job name in Jenkins.
+            build_id: Build ID for the Jenkins job.
+        """
+        self.cur.execute(
+            'DELETE FROM pendingjobs WHERE job_name = ? and build_id = ?',
+            (job_name, build_id))
+        self.conn.commit()
+
     def get_pending_job_id(self, job_name, build_id):
         """Get a pending job ID.
 
