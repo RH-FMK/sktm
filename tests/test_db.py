@@ -144,6 +144,26 @@ class TestDb(unittest.TestCase):  # pylint: disable=too-many-public-methods
         mock_sql.connect().commit.assert_called()
 
     @mock.patch('sktm.db.sqlite3')
+    def test_create_pendingjob(self, mock_sql):
+        """Ensure create_pending_job() makes a pendingjob record."""
+        # pylint: disable=W0212,E1101
+        testdb = SktDb(self.database_file)
+        mock_sql.connect().cursor().lastrowid = 1
+        result = testdb.create_pending_job('skt', '2')
+
+        self.assertEqual(result, 1)
+
+    @mock.patch('sktm.db.sqlite3')
+    def test_get_pendingjob(self, mock_sql):
+        """Ensure get_pending_job_id() retrieves a pendingjob record."""
+        # pylint: disable=W0212,E1101
+        testdb = SktDb(self.database_file)
+        mock_sql.connect().cursor().fetchone.return_value = [1]
+        result = testdb.get_pending_job_id('skt', '2')
+
+        self.assertEqual(result, '1')
+
+    @mock.patch('sktm.db.sqlite3')
     def test_create_repoid(self, mock_sql):
         """Ensure __create_repoid() inserts into DB and retrieves a repoid."""
         # pylint: disable=W0212,E1101
