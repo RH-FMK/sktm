@@ -89,7 +89,7 @@ def setup_logging(verbose):
 def cmd_baseline(sw, cfg):
     logging.info("checking baseline: %s [%s]", cfg.get("repo"), cfg.get("ref"))
     sw.set_baseline(cfg.get("repo"), cfg.get("ref"), cfg.get("cfgurl"))
-    sw.check_baseline()
+    sw.start_baseline_test()
 
 
 def cmd_patchwork(sw, cfg):

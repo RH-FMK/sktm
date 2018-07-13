@@ -177,8 +177,7 @@ class watcher(object):
                 pw.lastpatch = lpatch
         self.pw.append(pw)
 
-    # FIXME Fix the name, this function doesn't check anything by itself
-    def check_baseline(self):
+    def start_baseline_test(self):
         """Submit a Jenkins job for testing a kernel baseline.
 
         A kernel baseline is a known good commit. That commit is used to test
