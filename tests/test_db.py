@@ -154,6 +154,19 @@ class TestDb(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(result, 1)
 
     @mock.patch('sktm.db.sqlite3')
+    def test_delete_pendingjob(self, mock_sql):
+        """Ensure delete_pending_job() deletes a pendingjob record."""
+        # pylint: disable=W0212,E1101
+        testdb = SktDb(self.database_file)
+        result = testdb.delete_pending_job('skt', '2')
+
+        # Ensure we deleted entries from pendingpatches
+        execute_call_args = mock_sql.connect().cursor().execute.\
+            call_args[0]
+        self.assertIn('DELETE FROM pendingjobs', execute_call_args[0])
+        self.assertEqual(('skt','2'), execute_call_args[1])
+
+    @mock.patch('sktm.db.sqlite3')
     def test_get_pendingjob(self, mock_sql):
         """Ensure get_pending_job_id() retrieves a pendingjob record."""
         # pylint: disable=W0212,E1101
