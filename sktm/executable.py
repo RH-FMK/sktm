@@ -143,11 +143,6 @@ def main():
                       cfg.get("filter"), cfg.get("makeopts"))
 
     args.func(sw, cfg)
-    try:
-        sw.wait_for_pending()
-    except KeyboardInterrupt:
-        logging.info("Quitting...")
-        sw.cleanup()
 
 
 if __name__ == '__main__':
