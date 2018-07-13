@@ -160,6 +160,52 @@ class SktDb(object):
 
         return result[0]
 
+    def add_pending_job(self, job_name, build_id):
+        """Add a Jenkins job to the list of pending jobs.
+
+        Args:
+            job_name: Job name in jenkins
+            build_id: Build ID for the Jenkins job
+        """
+        self.cur.execute(
+            "INSERT INTO pendingjobs (job_name, build_id) VALUES (?,?)",
+            (job_name, build_id)
+        )
+        self.conn.commit()
+
+    def get_pending_jobs(self):
+        """Get a list of pending Jenkins jobs."""
+        self.cur.execute("SELECT * FROM pendingjobs")
+        return self.cur.fetchall()
+
+    def remove_pending_job(self, pendingjob_id):
+        """Remove a pending job and any associated pending patches.
+
+        Args:
+            pendingjob_id: ID of a job from the pendingjobs table.
+        """
+        self.cur.execute(
+            "DELETE FROM pendingjobs WHERE id = ?", str(pendingjob_id)
+        )
+        self.cur.execute(
+            "DELETE FROM pendingpatches WHERE pendingjob_id = ?",
+            str(pendingjob_id)
+        )
+        self.conn.commit()
+
+    def get_patches_for_job(self, pendingjob_id):
+        """Get a list of pending patches for a Jenkins job.
+
+        Args:
+            pendingjob_id:  ID of a job from the pendingjobs table.
+        """
+        pendingjob_id = str(pendingjob_id)
+        self.cur.execute(
+            "SELECT * FROM pendingpatches WHERE pendingjob_id = ?",
+            (pendingjob_id)
+        )
+        return self.cur.fetchall()
+
     def get_last_checked_patch(self, baseurl, project_id):
         """Get the patch id of the last patch that was checked.
 
