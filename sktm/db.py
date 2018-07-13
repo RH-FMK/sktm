@@ -68,6 +68,12 @@ class SktDb(object):
                   FOREIGN KEY(patchsource_id) REFERENCES patchsource(id)
                 );
 
+                CREATE TABLE pendingjobs(
+                  id INTEGER PRIMARY KEY,
+                  job_name TEXT,
+                  build_id INTEGER
+                );
+
                 CREATE TABLE testrun(
                   id INTEGER PRIMARY KEY,
                   result_id INTEGER,
