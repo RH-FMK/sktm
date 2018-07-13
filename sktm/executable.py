@@ -47,6 +47,9 @@ def setup_parser():
     parser_baseline.add_argument("ref", type=str, help="Base repo ref to test")
     parser_baseline.set_defaults(func=cmd_baseline)
 
+    parser_checkpending = subparsers.add_parser("checkpending")
+    parser_checkpending.set_defaults(func=cmd_checkpending)
+
     parser_patchwork = subparsers.add_parser("patchwork")
     parser_patchwork.add_argument("repo", type=str, help="Base repo URL")
     parser_patchwork.add_argument("baseurl", type=str, help="Base URL")
@@ -92,6 +95,12 @@ def cmd_baseline(sw, cfg):
     sw.check_baseline()
 
 
+def cmd_checkpending(sw, cfg):
+    """Check any pending jobs that were started during the last run."""
+    logging.info("checking pending jobs")
+    sw.check_pending()
+
+
 def cmd_patchwork(sw, cfg):
     logging.info("checking patchwork: %s [%s]", cfg.get("baseurl"),
                  cfg.get("project"))
@@ -134,11 +143,6 @@ def main():
                       cfg.get("filter"), cfg.get("makeopts"))
 
     args.func(sw, cfg)
-    try:
-        sw.wait_for_pending()
-    except KeyboardInterrupt:
-        logging.info("Quitting...")
-        sw.cleanup()
 
 
 if __name__ == '__main__':

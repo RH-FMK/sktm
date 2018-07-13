@@ -179,14 +179,19 @@ class watcher(object):
 
     # FIXME Fix the name, this function doesn't check anything by itself
     def check_baseline(self):
-        """Submit a build for baseline"""
-        self.pj.append((sktm.jtype.BASELINE,
-                        self.jk.build(self.jobname,
-                                      baserepo=self.baserepo,
-                                      ref=self.baseref,
-                                      baseconfig=self.cfgurl,
-                                      makeopts=self.makeopts),
-                        None))
+        """Submit a build for baseline."""
+        build_id = self.jk.build(
+            self.jobname,
+            baserepo=self.baserepo,
+            ref=self.baseref,
+            baseconfig=self.cfgurl,
+            makeopts=self.makeopts
+        )
+        self.pj.append((sktm.jtype.BASELINE, build_id, None))
+
+        # Add this baseline test to the pendingjobs table
+        self.db.add_pending_job(self.jobname, build_id)
+
 
     def filter_patchsets(self, series_summary_list):
         """
@@ -331,50 +336,66 @@ class watcher(object):
                              series.get_patch_url_list())
 
     def check_pending(self):
-        for (pjt, bid, cpw) in self.pj:
-            if self.jk.is_build_complete(self.jobname, bid):
-                logging.info("job completed: jjid=%d; type=%d", bid, pjt)
-                self.pj.remove((pjt, bid, cpw))
-                if pjt == sktm.jtype.BASELINE:
-                    self.db.update_baseline(
-                        self.baserepo,
-                        self.jk.get_base_hash(self.jobname, bid),
-                        self.jk.get_base_commitdate(self.jobname, bid),
-                        self.jk.get_result(self.jobname, bid),
-                        bid
-                    )
-                elif pjt == sktm.jtype.PATCHWORK:
-                    patches = list()
-                    bres = self.jk.get_result(self.jobname, bid)
-                    rurl = self.jk.get_result_url(self.jobname, bid)
-                    logging.info("result=%s", bres)
-                    logging.info("url=%s", rurl)
-                    basehash = self.jk.get_base_hash(self.jobname, bid)
-                    logging.info("basehash=%s", basehash)
-                    if bres == sktm.tresult.BASELINE_FAILURE:
-                        self.db.update_baseline(
-                            self.baserepo,
-                            basehash,
-                            self.jk.get_base_commitdate(self.jobname, bid),
-                            sktm.tresult.TEST_FAILURE,
-                            bid
-                        )
+        """Check on jobs that were sent to Jenkins during the last sktm run."""
+        # Get a list of pending Jenkins jobs
+        pending_jobs = self.db.get_pending_jobs()
 
-                    patch_url_list = self.jk.get_patchwork(self.jobname, bid)
-                    for patch_url in patch_url_list:
-                        patches.append(self.get_patch_info_from_url(cpw,
-                                                                    patch_url))
+        if not pending_jobs:
+            logging.info("No pending jobs to check -- exiting")
+            return
 
-                    if bres != sktm.tresult.BASELINE_FAILURE:
-                        self.db.commit_tested(patches)
-                else:
-                    raise Exception("Unknown job type: %d" % pjt)
+        for pending_job in pending_jobs:
+            pendingjob_id, job_name, build_id = pending_job
+            logging.info("Checking job: %s (#%d)", job_name, build_id)
 
-    def wait_for_pending(self):
-        self.check_pending()
-        while self.pj:
-            logging.debug("waiting for jobs to complete. %d remaining",
-                          len(self.pj))
-            time.sleep(60)
-            self.check_pending()
-        logging.info("no more pending jobs")
+            # Come back and check on the job later if it is still running.
+            if not self.jk.is_build_complete(job_name, build_id):
+                logging.info(
+                    "Job is still running: %s (#%d)", job_name, build_id
+                )
+                continue
+
+            # Get the build status and check to see if it was aborted.
+            result = self.jk.get_build_status(job_name, build_id)
+            if result == 'ABORTED':
+                logging.info(
+                    "Test was aborted in Jenkins: %s (#%d)",
+                    job_name,
+                    build_id
+                )
+                # Remove the pending job and any associated patches.
+                self.db.remove_pending_job(pendingjob_id)
+                continue
+
+            # Get a list of pending patches associated with this job.
+            pending_patches = self.db.get_patches_for_job(pendingjob_id)
+
+            # Was this a baseline test?
+            if not pending_patches:
+                logging.info(
+                    "Baseline test completed: %s (#%d) [%s]",
+                    job_name,
+                    build_id,
+                    result
+                )
+                # Update the database with the results of the baseline test.
+                self.db.update_baseline(
+                    self.baserepo,
+                    self.jk.get_base_hash(job_name, build_id),
+                    self.jk.get_base_commitdate(job_name, build_id),
+                    self.jk.get_result(job_name, build_id),
+                    build_id
+                )
+                self.db.remove_pending_job(pendingjob_id)
+                return
+
+            # If we made it this far, we are working on a patchwork test.
+            logging.info(
+                "Patchwork test completed: %s (#%d) [%s]",
+                job_name,
+                build_id,
+                result
+            )
+
+            # Clean up the list of pending patches.
+            self.db.commit_tested([x[1] for x in pending_patches])

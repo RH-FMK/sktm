@@ -332,6 +332,12 @@ class skt_jenkins(object):
 
         return not build.is_running()
 
+    def get_build_status(self, jobname, buildid):
+        """Return the status of a Jenkins job."""
+        job = self.server.get_job(jobname)
+        build = job.get_build(buildid)
+        return build.get_status()
+
     def _params_eq(self, build, params):
         try:
             build_params = build.get_actions()["parameters"]

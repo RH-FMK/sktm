@@ -62,10 +62,17 @@ class SktDb(object):
 
                 CREATE TABLE pendingpatches(
                   id INTEGER PRIMARY KEY,
-                  pdate TEXT,
-                  patchsource_id INTEGER,
+                  patch_id INTEGER UNIQUE,
                   timestamp INTEGER,
-                  FOREIGN KEY(patchsource_id) REFERENCES patchsource(id)
+                  pendingjob_id INTEGER,
+                  FOREIGN KEY(patch_id) REFERENCES patch(id),
+                  FOREIGN KEY(pendingjob_id) REFERENCES pendingjobs(id)
+                );
+
+                CREATE TABLE pendingjobs(
+                  id INTEGER PRIMARY KEY,
+                  job_name TEXT,
+                  build_id INTEGER
                 );
 
                 CREATE TABLE testrun(
@@ -153,6 +160,52 @@ class SktDb(object):
             return self.__create_sourceid(baseurl, project_id)
 
         return result[0]
+
+    def add_pending_job(self, job_name, build_id):
+        """Add a Jenkins job to the list of pending jobs.
+
+        Args:
+            job_name: Job name in jenkins
+            build_id: Build ID for the Jenkins job
+        """
+        self.cur.execute(
+            "INSERT INTO pendingjobs (job_name, build_id) VALUES (?,?)",
+            (job_name, build_id)
+        )
+        self.conn.commit()
+
+    def get_pending_jobs(self):
+        """Get a list of pending Jenkins jobs."""
+        self.cur.execute("SELECT * FROM pendingjobs")
+        return self.cur.fetchall()
+
+    def remove_pending_job(self, pendingjob_id):
+        """Remove a pending job and any associated pending patches.
+
+        Args:
+            pendingjob_id: ID of a job from the pendingjobs table.
+        """
+        self.cur.execute(
+            "DELETE FROM pendingjobs WHERE id = ?", str(pendingjob_id)
+        )
+        self.cur.execute(
+            "DELETE FROM pendingpatches WHERE pendingjob_id = ?",
+            str(pendingjob_id)
+        )
+        self.conn.commit()
+
+    def get_patches_for_job(self, pendingjob_id):
+        """Get a list of pending patches for a Jenkins job.
+
+        Args:
+            pendingjob_id:  ID of a job from the pendingjobs table.
+        """
+        pendingjob_id = str(pendingjob_id)
+        self.cur.execute(
+            "SELECT * FROM pendingpatches WHERE pendingjob_id = ?",
+            (pendingjob_id)
+        )
+        return self.cur.fetchall()
 
     def get_last_checked_patch(self, baseurl, project_id):
         """Get the patch id of the last patch that was checked.
@@ -373,57 +426,36 @@ class SktDb(object):
 
         return result[0]
 
-    def set_patchset_pending(self, baseurl, project_id, series_data):
-        """Add a patch to pendingpatches or update an existing entry.
-
-        Add each specified patch to the list of "pending" patches, with
-        specifed patch date, for specified Patchwork base URL and project ID,
-        and marked with current timestamp. Replace any previously added
-        patches with the same ID (bug: should be "same ID, project ID and
-        base URL").
+    def set_patchset_pending(self, series_data):
+        """Add or update an entry to the pending patches table.
 
         Args:
-            baseurl:     Base URL of the Patchwork instance the project ID and
-                         patch IDs belong to.
-            project_id:  ID of the Patchwork project the patch IDs belong to.
-            series_data: List of info tuples for patches to add to the list,
-                         where each tuple contains the patch ID and a free-form
-                         patch date string.
+            series_data: List of info tuple of patches to add to the pending
+                         patches list.
 
         """
         sourceid = self.__get_sourceid(baseurl, project_id)
         tstamp = int(time.time())
 
         logging.debug("setting patches as pending: %s", series_data)
-        self.cur.executemany('INSERT OR REPLACE INTO '
-                             'pendingpatches(id, pdate, patchsource_id, '
-                             'timestamp) '
-                             'VALUES(?, ?, ?, ?)',
-                             [(patch_id, patch_date, sourceid, tstamp) for
-                              (patch_id, patch_date) in series_data])
+        self.cur.executemany(
+            'INSERT OR REPLACE INTO pendingpatches '
+            '(patch_id, timestamp) VALUES(?, ?)',
+            [(patch_id, tstamp) for (patch_id, patch_date) in series_data])
         self.conn.commit()
 
-    def __unset_patchset_pending(self, baseurl, patch_id_list):
-        """Remove a patch from the list of pending patches.
-
-        Remove each specified patch from the list of "pending" patches, for
-        the specified Patchwork base URL.
+    def __unset_patchset_pending(self, patch_id_list):
+        """Remove patches from the list of pending patches.
 
         Args:
-            baseurl:       Base URL of the Patchwork instance the patch IDs
-                           belong to.
             patch_id_list: List of IDs of patches to be removed from the list.
 
         """
         logging.debug("removing patches from pending list: %s", patch_id_list)
 
-        self.cur.executemany('DELETE FROM pendingpatches WHERE '
-                             'patchsource_id IN '
-                             '(SELECT DISTINCT id FROM patchsource WHERE '
-                             'baseurl = ?) '
-                             'AND id = ? ',
-                             [(baseurl, patch_id) for
-                              patch_id in patch_id_list])
+        self.cur.executemany(
+            'DELETE FROM pendingpatches WHERE patch_id = ?', [patches]
+        )
         self.conn.commit()
 
     def update_baseline(self, baserepo, commithash, commitdate,
@@ -469,13 +501,7 @@ class SktDb(object):
             patches:    List of patches that were tested
         """
         logging.debug("commit_tested: patches=%d", len(patches))
-        self.commit_series(patches)
-
-        for (patch_id, patch_name, patch_url, baseurl, project_id,
-             patch_date) in patches:
-            # TODO: Can accumulate per-project list instead of doing it one by
-            # one
-            self.__unset_patchset_pending(baseurl, [patch_id])
+        self.__unset_patchset_pending(patches)
 
     def __commit_testrun(self, result, buildid):
         """Add a test run to the database.
