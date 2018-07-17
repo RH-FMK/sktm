@@ -350,37 +350,45 @@ class watcher(object):
 
     def check_pending(self):
         for (job_type, build_id, pw_instance) in self.pj:
-            if self.jk.is_build_complete(self.jobname, build_id):
-                logging.info("job completed: jjid=%d; type=%d", build_id,
-                             job_type)
-                self.pj.remove((job_type, build_id, pw_instance))
-                if job_type == sktm.jtype.BASELINE:
-                    self.db.update_baseline(
-                        self.baserepo,
-                        self.jk.get_base_hash(self.jobname, build_id),
-                        self.jk.get_base_commitdate(self.jobname, build_id),
-                        self.jk.get_result(self.jobname, build_id),
-                        build_id
-                    )
-                elif job_type == sktm.jtype.PATCHWORK:
-                    patches = list()
-                    build_result = self.jk.get_result(self.jobname, build_id)
-                    report_url = self.jk.get_result_url(self.jobname, build_id)
-                    logging.info("result=%s", build_result)
-                    logging.info("url=%s", report_url)
-                    basehash = self.jk.get_base_hash(self.jobname, build_id)
-                    logging.info("basehash=%s", basehash)
 
-                    patch_url_list = self.jk.get_patchwork(self.jobname,
-                                                           build_id)
-                    for patch_url in patch_url_list:
-                        patches.append(
-                            self.get_patch_info_from_url(pw_instance,
-                                                         patch_url)
-                        )
-                    self.db.commit_tested(patches)
-                else:
-                    raise Exception("Unknown job type: %d" % job_type)
+            try:
+                if not self.jk.is_build_complete(self.jobname, build_id):
+                    continue
+            except:  # noqa pylint: disable=bare-except
+                continue
+
+            # Log the completed job and remove it from the list of jobs to
+            # check
+            logging.info("job completed: jjid=%d; type=%d", build_id, job_type)
+            self.pj.remove((job_type, build_id, pw_instance))
+
+            if job_type == sktm.jtype.BASELINE:
+                # Update baseline records
+                self.db.update_baseline(
+                    self.baserepo,
+                    self.jk.get_base_hash(self.jobname, build_id),
+                    self.jk.get_base_commitdate(self.jobname, build_id),
+                    self.jk.get_result(self.jobname, build_id),
+                    build_id
+                )
+            elif job_type == sktm.jtype.PATCHWORK:
+                # Update the testing status for the patchwork patches
+                patches = list()
+                build_result = self.jk.get_result(self.jobname, build_id)
+                report_url = self.jk.get_result_url(self.jobname, build_id)
+                logging.info("result=%s", build_result)
+                logging.info("url=%s", report_url)
+                basehash = self.jk.get_base_hash(self.jobname, build_id)
+                logging.info("basehash=%s", basehash)
+
+                patch_url_list = self.jk.get_patchwork(self.jobname, build_id)
+                for patch_url in patch_url_list:
+                    patches.append(
+                        self.get_patch_info_from_url(pw_instance, patch_url)
+                    )
+                self.db.commit_tested(patches)
+            else:
+                raise Exception("Unknown job type: %d" % job_type)
 
     def wait_for_pending(self):
         self.check_pending()
