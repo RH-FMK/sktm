@@ -363,8 +363,8 @@ class watcher(object):
             logging.info("job completed: jjid=%d; type=%d", build_id, job_type)
             self.pj.remove((job_type, build_id, pw_instance))
 
+            # Update baseline records
             if job_type == sktm.jtype.BASELINE:
-                # Update baseline records
                 self.db.update_baseline(
                     self.baserepo,
                     self.jk.get_base_hash(self.jobname, build_id),
@@ -372,24 +372,36 @@ class watcher(object):
                     self.jk.get_result(self.jobname, build_id),
                     build_id
                 )
-            elif job_type == sktm.jtype.PATCHWORK:
-                # Update the testing status for the patchwork patches
-                patches = list()
+                continue
+
+            # Update the testing status for the patchwork patches
+            if job_type == sktm.jtype.PATCHWORK:
+                # Retrieve the result of the Jenkins build
                 build_result = self.jk.get_result(self.jobname, build_id)
-                report_url = self.jk.get_result_url(self.jobname, build_id)
                 logging.info("result=%s", build_result)
+
+                # Get the URL of the Jenkins build
+                report_url = self.jk.get_result_url(self.jobname, build_id)
                 logging.info("url=%s", report_url)
+
+                # Note the base hash of the kernel repository that the patches
+                # were applied to
                 basehash = self.jk.get_base_hash(self.jobname, build_id)
                 logging.info("basehash=%s", basehash)
 
+                # Get a list of the patchwork URLs in the job and commit them
+                # to the `patch` table within the database
                 patch_url_list = self.jk.get_patchwork(self.jobname, build_id)
-                for patch_url in patch_url_list:
-                    patches.append(
-                        self.get_patch_info_from_url(pw_instance, patch_url)
-                    )
+                patches = [
+                    self.get_patch_info_from_url(pw_instance, x)
+                    for x in patch_url_list
+                ]
                 self.db.commit_tested(patches)
-            else:
-                raise Exception("Unknown job type: %d" % job_type)
+
+                continue
+
+            # sktm does not know how to handle this job type
+            raise Exception("Unknown job type: %d" % job_type)
 
     def wait_for_pending(self):
         self.check_pending()
