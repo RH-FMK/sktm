@@ -349,6 +349,7 @@ class watcher(object):
                              series.get_patch_url_list())
 
     def check_pending(self):
+        """Check pending jobs and update their status in the database."""
         for (job_type, build_id, pw_instance) in self.pj:
 
             try:
