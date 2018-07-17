@@ -195,16 +195,26 @@ class watcher(object):
                 pw.lastpatch = lpatch
         self.pw.append(pw)
 
-    # FIXME Fix the name, this function doesn't check anything by itself
-    def check_baseline(self):
-        """Submit a build for baseline"""
-        self.pj.append((sktm.jtype.BASELINE,
-                        self.jk.build(self.jobname,
-                                      baserepo=self.baserepo,
-                                      ref=self.baseref,
-                                      baseconfig=self.cfgurl,
-                                      makeopts=self.makeopts),
-                        None))
+    def start_baseline_test(self):
+        """Submit a Jenkins job for testing a kernel baseline.
+
+        A kernel baseline is a known good commit. That commit is used to test
+        patches which are not known to be good.
+        """
+        # Start a Jenkins job and capture the build_id
+        build_id = self.jk.build(
+            self.jobname,
+            baserepo=self.baserepo,
+            ref=self.baseref,
+            baseconfig=self.cfgurl,
+            makeopts=self.makeopts
+        )
+
+        # Add the Jenkins job to the list of pending jobs
+        self.db.create_pending_job(self.jobname, build_id)
+
+        # Append it to the list of jobs to check later
+        self.pj.append((sktm.jtype.BASELINE, build_id, None))
 
     def filter_patchsets(self, series_summary_list):
         """
@@ -302,21 +312,32 @@ class watcher(object):
             new_series = cpw.get_new_patchsets()
             for series in new_series:
                 logging.info("new series: %s", series.get_obj_url_list())
+
+                # Get a list of patch URLs from the series
+                patch_urls = series.get_patch_url_list()
+
+                # Make a list of patch info tuples
+                patches = [self.get_patch_info_from_url(cpw, patch_url)
+                           for patch_url in patch_urls]
+
+                # Add the patches to the database
+                self.db.commit_series(patches)
+
+            # Filter the list of series into the ones we will test (ready)
+            # and the ones that are filtered out (dropped)
             series_ready, series_dropped = self.filter_patchsets(new_series)
+
+            # Log the series that are ready to test
             for series in series_ready:
                 logging.info("ready series: %s", series.get_obj_url_list())
+
+            # Log the series that have been dropped (due to filtering)
             for series in series_dropped:
                 logging.info("dropped series: %s", series.get_obj_url_list())
 
-                # Retrieve all data and save dropped patches in the DB
-                patches = []
-                for patch_url in series.get_patch_url_list():
-                    patches.append(self.get_patch_info_from_url(cpw,
-                                                                patch_url))
-
-                self.db.commit_series(patches)
-
+            # Add the list of ready series to our list to test
             series_list += series_ready
+
             # Add series summaries for all patches staying pending for
             # longer than 12 hours
             series_list += cpw.get_patchsets(
@@ -324,24 +345,35 @@ class watcher(object):
                                                     cpw.project_id,
                                                     43200)
             )
-            # For each series summary
+
             for series in series_list:
-                # (Re-)add the series' patches to the "pending" list
-                self.db.set_patchset_pending(cpw.baseurl, cpw.project_id,
-                                             series.get_patch_info_list())
                 # Submit and remember a Jenkins build for the series
-                self.pj.append((sktm.jtype.PATCHWORK,
-                                self.jk.build(
-                                    self.jobname,
-                                    baserepo=self.baserepo,
-                                    ref=stablecommit,
-                                    baseconfig=self.cfgurl,
-                                    message_id=series.message_id,
-                                    subject=series.subject,
-                                    emails=series.email_addr_set,
-                                    patchwork=series.get_patch_url_list(),
-                                    makeopts=self.makeopts),
-                                cpw))
+                build_id = self.jk.build(
+                    self.jobname,
+                    baserepo=self.baserepo,
+                    ref=stablecommit,
+                    baseconfig=self.cfgurl,
+                    message_id=series.message_id,
+                    subject=series.subject,
+                    emails=series.email_addr_set,
+                    patchwork=series.get_patch_url_list(),
+                    makeopts=self.makeopts
+                )
+                self.pj.append((sktm.jtype.PATCHWORK, build_id, cpw))
+
+                # Store the pending job in the database
+                pendingjob_id = self.db.create_pending_job(
+                    self.jobname,
+                    build_id
+                )
+
+                # Add the series to the list of pending patches or update the
+                # series if the series is being re-added after expiring.
+                self.db.set_patchset_pending(
+                    pendingjob_id,
+                    series.get_patch_info_list()
+                )
+
                 logging.info("submitted message ID: %s", series.message_id)
                 logging.info("submitted subject: %s", series.subject)
                 logging.info("submitted emails: %s", series.email_addr_set)
@@ -361,30 +393,22 @@ class watcher(object):
                         self.jk.get_result(self.jobname, bid),
                         bid
                     )
+
+                    # Delete the pendingjob from the database
+                    self.db.delete_pending_job(self.jobname, bid)
+
                 elif pjt == sktm.jtype.PATCHWORK:
-                    patches = list()
-                    bres = self.jk.get_result(self.jobname, bid)
-                    rurl = self.jk.get_result_url(self.jobname, bid)
-                    logging.info("result=%s", bres)
-                    logging.info("url=%s", rurl)
-                    basehash = self.jk.get_base_hash(self.jobname, bid)
-                    logging.info("basehash=%s", basehash)
-                    if bres == sktm.tresult.BASELINE_FAILURE:
-                        self.db.update_baseline(
-                            self.baserepo,
-                            basehash,
-                            self.jk.get_base_commitdate(self.jobname, bid),
-                            sktm.tresult.TEST_FAILURE,
-                            bid
-                        )
+                    # Get the build result
+                    result = self.jk.get_result(self.jobname, bid)
+                    logging.info("result=%s", result)
 
-                    patch_url_list = self.jk.get_patchwork(self.jobname, bid)
-                    for patch_url in patch_url_list:
-                        patches.append(self.get_patch_info_from_url(cpw,
-                                                                    patch_url))
+                    # Get the build result URL
+                    result_url = self.jk.get_result_url(self.jobname, bid)
+                    logging.info("url=%s", result_url)
 
-                    if bres != sktm.tresult.BASELINE_FAILURE:
-                        self.db.commit_tested(patches)
+                    # Remove the patches from the pendingpatches table and
+                    # remove the pendingjob entry.
+                    self.db.unset_patchset_pending(self.jobname, bid)
                 else:
                     raise Exception("Unknown job type: %d" % pjt)
 
