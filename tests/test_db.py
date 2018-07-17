@@ -144,6 +144,26 @@ class TestDb(unittest.TestCase):  # pylint: disable=too-many-public-methods
         mock_sql.connect().commit.assert_called()
 
     @mock.patch('sktm.db.sqlite3')
+    def test_create_pendingjob(self, mock_sql):
+        """Ensure create_pending_job() makes a pendingjob record."""
+        # pylint: disable=W0212,E1101
+        testdb = SktDb(self.database_file)
+        mock_sql.connect().cursor().lastrowid = 1
+        result = testdb.create_pending_job('skt', '2')
+
+        self.assertEqual(result, 1)
+
+    @mock.patch('sktm.db.sqlite3')
+    def test_get_pendingjob(self, mock_sql):
+        """Ensure get_pending_job_id() retrieves a pendingjob record."""
+        # pylint: disable=W0212,E1101
+        testdb = SktDb(self.database_file)
+        mock_sql.connect().cursor().fetchone.return_value = [1]
+        result = testdb.get_pending_job_id('skt', '2')
+
+        self.assertEqual(result, '1')
+
+    @mock.patch('sktm.db.sqlite3')
     def test_create_repoid(self, mock_sql):
         """Ensure __create_repoid() inserts into DB and retrieves a repoid."""
         # pylint: disable=W0212,E1101
@@ -399,7 +419,7 @@ class TestDb(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_set_patchset_pending(self, mock_sql, mock_log):
         """Ensure patches are added to the pendingpatch table."""
         testdb = SktDb(self.database_file)
-        testdb.set_patchset_pending('baseurl', '1', [('1', '2018-06-04')])
+        testdb.set_patchset_pending('1', [('1', '2018-06-04')])
 
         mock_sql.connect().cursor().executemany.assert_called_once()
         mock_sql.connect().commit.assert_called()
@@ -413,26 +433,27 @@ class TestDb(unittest.TestCase):  # pylint: disable=too-many-public-methods
             execute_call_args[0]
         )
 
-    @mock.patch('logging.debug')
-    @mock.patch('sktm.db.SktDb._SktDb__get_sourceid')
+    @mock.patch('sktm.db.SktDb.get_pending_job_id')
     @mock.patch('sktm.db.sqlite3')
-    def test_unset_patchset_pending(self, mock_sql, mock_get_sourceid,
-                                    mock_log):
+    def test_unset_patchset_pending(self, mock_sql, mock_getpendingjob):
         """Ensure patches are removed from the pendingpatch table."""
         # pylint: disable=W0212,E1101
         testdb = SktDb(self.database_file)
-        mock_get_sourceid.return_value = 1
+        mock_getpendingjob.return_value = '1'
 
-        testdb._SktDb__unset_patchset_pending('baseurl', ['1'])
+        testdb.unset_patchset_pending('skt-multiarch', '1')
 
-        # Ensure a debug log was written
-        mock_log.assert_called_once()
-
-        # Check if we have a proper DELETE query executed
+        # Ensure we deleted entries from pendingpatches
         execute_call_args = mock_sql.connect().cursor().executemany.\
             call_args[0]
         self.assertIn('DELETE FROM pendingpatches', execute_call_args[0])
-        self.assertEqual([('baseurl', '1')], execute_call_args[1])
+        self.assertEqual(('1'), execute_call_args[1])
+
+        # Ensure we deleted entries from pendingjobs
+        execute_call_args = mock_sql.connect().cursor().execute.\
+            call_args[0]
+        self.assertIn('DELETE FROM pendingjobs', execute_call_args[0])
+        self.assertEqual(('1'), execute_call_args[1])
 
         # Ensure the data was committed to the database
         mock_sql.connect().commit.assert_called()
