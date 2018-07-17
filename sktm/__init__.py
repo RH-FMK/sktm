@@ -349,34 +349,38 @@ class watcher(object):
                              series.get_patch_url_list())
 
     def check_pending(self):
-        for (pjt, bid, cpw) in self.pj:
-            if self.jk.is_build_complete(self.jobname, bid):
-                logging.info("job completed: jjid=%d; type=%d", bid, pjt)
-                self.pj.remove((pjt, bid, cpw))
-                if pjt == sktm.jtype.BASELINE:
+        for (job_type, build_id, pw_instance) in self.pj:
+            if self.jk.is_build_complete(self.jobname, build_id):
+                logging.info("job completed: jjid=%d; type=%d", build_id,
+                             job_type)
+                self.pj.remove((job_type, build_id, pw_instance))
+                if job_type == sktm.jtype.BASELINE:
                     self.db.update_baseline(
                         self.baserepo,
-                        self.jk.get_base_hash(self.jobname, bid),
-                        self.jk.get_base_commitdate(self.jobname, bid),
-                        self.jk.get_result(self.jobname, bid),
-                        bid
+                        self.jk.get_base_hash(self.jobname, build_id),
+                        self.jk.get_base_commitdate(self.jobname, build_id),
+                        self.jk.get_result(self.jobname, build_id),
+                        build_id
                     )
-                elif pjt == sktm.jtype.PATCHWORK:
+                elif job_type == sktm.jtype.PATCHWORK:
                     patches = list()
-                    bres = self.jk.get_result(self.jobname, bid)
-                    rurl = self.jk.get_result_url(self.jobname, bid)
-                    logging.info("result=%s", bres)
-                    logging.info("url=%s", rurl)
-                    basehash = self.jk.get_base_hash(self.jobname, bid)
+                    build_result = self.jk.get_result(self.jobname, build_id)
+                    report_url = self.jk.get_result_url(self.jobname, build_id)
+                    logging.info("result=%s", build_result)
+                    logging.info("url=%s", report_url)
+                    basehash = self.jk.get_base_hash(self.jobname, build_id)
                     logging.info("basehash=%s", basehash)
 
-                    patch_url_list = self.jk.get_patchwork(self.jobname, bid)
+                    patch_url_list = self.jk.get_patchwork(self.jobname,
+                                                           build_id)
                     for patch_url in patch_url_list:
-                        patches.append(self.get_patch_info_from_url(cpw,
-                                                                    patch_url))
+                        patches.append(
+                            self.get_patch_info_from_url(pw_instance,
+                                                         patch_url)
+                        )
                     self.db.commit_tested(patches)
                 else:
-                    raise Exception("Unknown job type: %d" % pjt)
+                    raise Exception("Unknown job type: %d" % job_type)
 
     def wait_for_pending(self):
         self.check_pending()
