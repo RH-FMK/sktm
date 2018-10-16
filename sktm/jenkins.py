@@ -209,13 +209,40 @@ class JenkinsProject(object):
         Returns:
             The value uniform for the key across all steps.
         """
-        def verify(first_key, second_key):
-            if first_key != second_key:
-                raise Exception("Non-uniform value of key %s: %s != %s",
-                                cfgkey, first_key, second_key)
-            return first_key
+        def verify(key, a, b):
+            """
+            Deep-compare two values for a specified key name, return the first
+            oneif they're equal, throw an exception if not. Only lists are
+            supported for deep-compare at the moment.
 
-        return reduce(verify,
+            Args:
+                key:    The compared key's name.
+                a:      The first value to compare.
+                b:      The second value to compare.
+
+            Returns:
+                The first value.
+            """
+            if type(a) != type(b):
+                raise Exception("Non-uniform value type of key %s: %s != %s",
+                                key, type(a), type(b))
+            if type(a) == list:
+                if len(a) != len(b):
+                    raise Exception(
+                            "Non-uniform array value length of key %s: %u != %u",
+                            key, len(a), len(b))
+                for i in xrange(0, len):
+                    try:
+                        verify(key, a[i], b[i])
+                    except Exception as exc:
+                        raise Exception("Non-uniform value of key %s:\n%s",
+                                        key, str(exc))
+            elif a != b:
+                raise Exception("Non-uniform value of key %s: %s != %s",
+                                key, a, b)
+            return a
+
+        return reduce(lambda a, b: verify(cfgkey, a, b),
                       self.__get_cfg_data_list(buildid, stepname,
                                                cfgkey, default))
 
@@ -282,7 +309,16 @@ class JenkinsProject(object):
             The list of Patchwork patch URLs, in the order the patches should
             be applied in.
         """
-        return self.__get_cfg_data_uniform(buildid, "skt.cmd_merge", "pw")
+        patch_url_list = []
+        merge_queue = self.__get_cfg_data_uniform(buildid, "skt.cmd_merge",
+                                                  "merge_queue")
+        for merge in merge_queue:
+            if merge[0] != "pw":
+                raise Exception(
+                        "Invalid merge type \"%s\" encountered in the queue",
+                        merge[0])
+            patch_url_list.append(pw[1])
+        return patch_url_list
 
     def get_baseretcode(self, buildid):
         """
